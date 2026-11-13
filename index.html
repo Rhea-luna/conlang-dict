@@ -1,0 +1,2770 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>人工言語辞書</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600&family=Lora:wght@400;700&family=Libre+Baskerville:wght@400;700&family=Noto+Serif+JP:wght@400;500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0e0e12;
+    --bg2: #16161c;
+    --bg3: #1e1e28;
+    --border: rgba(255,255,255,0.07);
+    --border2: rgba(255,255,255,0.14);
+    --text: #e8e6f0;
+    --text2: #9994b0;
+    --text3: #5a5670;
+    --accent: #c9a96e;
+    --accent2: #e8c98a;
+    --purple: #9b7fd4;
+    --teal: #5ec4b0;
+    --coral: #e07a6a;
+    --r: 8px;
+    --r2: 12px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'Noto Serif JP', serif; min-height: 100vh; }
+
+  .header {
+    border-bottom: 1px solid var(--border);
+    padding: 0 2rem; height: 60px;
+    display: flex; align-items: center; justify-content: space-between;
+    position: sticky; top: 0;
+    background: rgba(14,14,18,0.92);
+    backdrop-filter: blur(12px);
+    z-index: 50;
+  }
+  .logo { font-family: 'Playfair Display', serif; font-size: 20px; letter-spacing: 0.04em; color: var(--accent); display: flex; align-items: center; gap: 10px; }
+  .logo-mark { width: 28px; height: 28px; border: 1.5px solid var(--accent); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 13px; }
+  .header-right { display: flex; align-items: center; gap: 12px; }
+  .stat-pill { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--text2); background: var(--bg3); border: 1px solid var(--border); padding: 4px 12px; border-radius: 20px; }
+  .stat-pill b { color: var(--accent); }
+  .btn-add { background: var(--accent); color: #1a1400; border: none; padding: 7px 18px; border-radius: var(--r); font-family: 'Noto Serif JP', serif; font-size: 13px; font-weight: 500; cursor: pointer; transition: background 0.15s, transform 0.1s; }
+  .btn-add:hover { background: var(--accent2); transform: translateY(-1px); }
+  .btn-add:active { transform: translateY(0); }
+
+  .layout { display: grid; grid-template-columns: 220px 1fr; min-height: calc(100vh - 60px); }
+
+  .sidebar { border-right: 1px solid var(--border); padding: 0; background: var(--bg2); position: sticky; top: 60px; height: calc(100vh - 60px); overflow-y: auto; display: flex; flex-direction: column; }
+  .sidebar-section { padding: 0 1rem; margin-bottom: 2rem; }
+  .sidebar-label { font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text3); font-family: 'JetBrains Mono', monospace; padding: 0 0.5rem; margin-bottom: 8px; }
+
+  /* 辞書一覧（サイドバー） */
+  .sidebar-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0.9rem 1rem 0.6rem;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .sidebar-header-label { font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--text3); font-family: 'JetBrains Mono', monospace; }
+  .dict-icon-btn {
+    width: 24px; height: 24px; display: flex; align-items: center; justify-content: center;
+    background: none; border: 1px solid var(--border2); border-radius: 5px;
+    color: var(--text3); cursor: pointer; font-size: 14px; flex-shrink: 0;
+    transition: color 0.1s, border-color 0.1s, background 0.1s; line-height: 1;
+  }
+  .dict-icon-btn:hover { color: var(--accent); border-color: var(--accent); background: rgba(201,169,110,0.08); }
+
+  .dict-list { padding: 6px 8px; flex: 1; overflow-y: auto; }
+  .dict-item {
+    display: flex; flex-direction: column;
+    padding: 8px 10px; border-radius: var(--r); cursor: pointer;
+    font-size: 14px; color: var(--text2);
+    transition: background 0.1s, color 0.1s;
+    border: none; background: none; width: 100%; text-align: left;
+    gap: 4px; margin-bottom: 2px;
+  }
+  .dict-item:hover { background: var(--bg3); color: var(--text); }
+  .dict-item.active { background: rgba(201,169,110,0.12); color: var(--accent); }
+  .dict-item-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }
+  .dict-item-actions {
+    display: flex; gap: 5px;
+    opacity: 0; transition: opacity 0.12s;
+  }
+  .dict-item:hover .dict-item-actions,
+  .dict-item.active .dict-item-actions { opacity: 1; }
+  .dict-item-btn {
+    padding: 2px 9px; font-size: 11px; border-radius: 4px;
+    border: 1px solid var(--border2); background: var(--bg);
+    color: var(--text3); cursor: pointer;
+    font-family: 'Noto Serif JP', serif;
+    transition: color 0.1s, border-color 0.1s, background 0.1s;
+  }
+  .dict-item-btn:hover { color: var(--text); background: var(--bg3); border-color: var(--border2); }
+  .dict-item-btn.del:hover { color: var(--coral); border-color: var(--coral); background: rgba(224,122,106,0.08); }
+
+  .sidebar-inner { padding: 1.5rem 0; flex: 1; overflow-y: auto; }
+  .nav-item { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; border-radius: var(--r); cursor: pointer; font-size: 14px; color: var(--text2); transition: background 0.1s, color 0.1s; border: none; background: none; width: 100%; text-align: left; }
+  .nav-item:hover { background: var(--bg3); color: var(--text); }
+  .nav-item.active { background: rgba(201,169,110,0.12); color: var(--accent); }
+  .nav-item .count { font-family: 'JetBrains Mono', monospace; font-size: 11px; background: var(--bg); padding: 1px 7px; border-radius: 10px; color: var(--text3); }
+  .nav-item.active .count { color: var(--accent); }
+  .pos-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 8px; flex-shrink: 0; }
+
+  .main { padding: 0; width: 100%; display: flex; flex-direction: column; height: calc(100vh - 60px); overflow: hidden; }
+  .main-sticky { padding: 0.5rem 1.5rem 0; background: var(--bg); position: sticky; top: 0; z-index: 10; flex-shrink: 0; }
+  .main-scroll { padding: 0 1.5rem 1rem; overflow-y: auto; flex: 1; }
+  .tabbar { display: flex; gap: 2px; margin-bottom: 0.6rem; background: var(--bg2); border: 1px solid var(--border); border-radius: var(--r); padding: 3px; width: fit-content; }
+  .tabbar-btn { padding: 4px 13px; border-radius: 5px; border: none; background: none; color: var(--text2); font-family: 'Noto Serif JP', serif; font-size: 12px; cursor: pointer; transition: background 0.1s, color 0.1s; }
+  .tabbar-btn.active { background: var(--bg3); color: var(--text); border: 1px solid var(--border2); }
+
+  .search-row { display: flex; gap: 10px; margin-bottom: 4px; }
+  .search-wrap { position: relative; flex: 1; }
+  .search-wrap input { width: 100%; background: var(--bg2); border: 1px solid var(--border); border-radius: var(--r); padding: 9px 14px 9px 38px; color: var(--text); font-family: 'Noto Serif JP', serif; font-size: 14px; outline: none; transition: border-color 0.15s; }
+  .search-wrap input:focus { border-color: var(--accent); }
+  .search-wrap input::placeholder { color: var(--text3); }
+  .search-icon { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text3); font-size: 15px; }
+  .search-row select { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--r); padding: 9px 12px; color: var(--text2); font-family: 'Noto Serif JP', serif; font-size: 13px; outline: none; cursor: pointer; }
+  .search-row select:focus { border-color: var(--accent); }
+
+  /* 検索スコープボタン */
+  .search-scope-bar { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 0.5rem; }
+  .scope-btn {
+    padding: 3px 10px; font-size: 11px; border-radius: 20px;
+    border: 1px solid var(--border2); background: none;
+    color: var(--text3); cursor: pointer; font-family: 'Noto Serif JP', serif;
+    transition: background 0.1s, color 0.1s, border-color 0.1s;
+    white-space: nowrap;
+  }
+  .scope-btn:hover { color: var(--text); border-color: var(--text3); }
+  .scope-btn.active {
+    background: rgba(201,169,110,0.15); color: var(--accent);
+    border-color: rgba(201,169,110,0.5);
+  }
+
+  /* ── WORD LIST (横長カード) ── */
+  .word-list { display: flex; flex-direction: column; gap: 7px; }
+
+  .word-card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: var(--r2);
+    padding: 0.6rem 1rem;
+    cursor: default;
+    transition: border-color 0.15s, background 0.1s;
+    position: relative;
+    overflow: hidden;
+    display: grid;
+    grid-template-columns: 260px 1fr;
+    gap: 0 1.25rem;
+    align-items: start;
+  }
+  .word-card:hover { border-color: var(--border2); background: var(--bg3); }
+
+  /* 左カラム: 見出し語 */
+  .card-left { padding-left: 6px; }
+  
+  .word-main-row { display: flex; align-items: center; gap: 10px; line-height: 1.2; margin-bottom: 2px; flex-wrap: wrap; }
+  .word-main { font-family: var(--word-font, 'Libre Baskerville', serif); font-size: 22px; font-weight: 600; color: var(--text); margin-left: -4px; overflow-wrap: break-word; word-break: break-all; min-width: 0; font-variant-ligatures: none; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; text-rendering: geometricPrecision; }
+  .word-translit { font-family: 'Noto Serif JP', serif; font-size: 14px; color: var(--text3); }
+  .word-roman { font-family: sans-serif; font-size: 12px; color: var(--text3); margin-bottom: 3px; }
+
+  /* 品詞バッジ群 */
+  .pos-badges { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 3px; }
+  .pos-badge { font-family: 'JetBrains Mono', monospace; font-size: 10px; padding: 2px 8px; border-radius: 4px; border: 1px solid var(--border2); color: var(--text3); display: inline-block; min-width: 2em; min-height: 1.6em; line-height: 1.6; vertical-align: middle; }
+
+  /* カードアクション */
+  .card-actions { display: flex; gap: 6px; margin-top: 5px; }
+  .btn-sm { padding: 4px 10px; font-size: 11px; border-radius: 6px; border: 1px solid var(--border2); background: var(--bg); color: var(--text2); cursor: pointer; font-family: 'Noto Serif JP', serif; transition: background 0.1s, color 0.1s; }
+  .btn-sm:hover { background: var(--bg3); color: var(--text); }
+  .btn-sm.del:hover { border-color: var(--coral); color: var(--coral); }
+
+  /* カードをクリックで編集 */
+  .word-card { cursor: pointer; }
+  .word-card:hover { border-color: var(--accent); }
+  .card-del-btn {
+    position: absolute; top: 10px; right: 10px;
+    opacity: 0; transition: opacity 0.15s;
+    padding: 3px 8px; font-size: 11px; border-radius: 5px;
+    border: 1px solid var(--border2); background: var(--bg2);
+    color: var(--text3); cursor: pointer; font-family: 'Noto Serif JP', serif;
+  }
+  .word-card:hover .card-actions-hover, .rule-card:hover .card-actions-hover { opacity: 1; }
+  .card-del-btn:hover { border-color: var(--coral); color: var(--coral); background: rgba(224,122,106,0.08); }
+  .card-actions-hover {
+    position: absolute; top: 10px; right: 10px;
+    display: flex; gap: 4px;
+    opacity: 0; transition: opacity 0.15s;
+  }
+  .word-card:hover .card-actions-hover { opacity: 1; }
+  .card-action-btn {
+    padding: 3px 8px; font-size: 11px; border-radius: 5px;
+    border: 1px solid var(--border2); background: var(--bg2);
+    color: var(--text3); cursor: pointer; font-family: 'Noto Serif JP', serif;
+    transition: color 0.1s, border-color 0.1s;
+  }
+  .card-action-btn:hover { color: var(--text); }
+  .card-action-btn.del:hover { border-color: var(--coral); color: var(--coral); background: rgba(224,122,106,0.08); }
+    position: absolute; top: 10px; right: 52px;
+    opacity: 0; transition: opacity 0.15s;
+    padding: 3px 8px; font-size: 11px; border-radius: 5px;
+    border: 1px solid var(--border2); background: var(--bg2);
+    color: var(--text3); cursor: pointer; font-family: 'Noto Serif JP', serif;
+  }
+  .rule-card:hover .card-edit-btn { opacity: 1; }
+  .card-edit-btn:hover { border-color: var(--border2); color: var(--text); }
+
+  /* 右カラム: 詳細 */
+  .card-right { border-left: 1px solid var(--border); padding-left: 1.25rem; }
+
+  /* 複数義ブロック */
+  .senses { display: flex; flex-direction: column; gap: 6px; margin-bottom: 6px; }
+  .sense-block { display: flex; gap: 8px; align-items: flex-start; }
+  .sense-letter {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--text3);
+    width: 14px;
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+  .sense-inner { flex: 1; }
+  .sense-row { display: flex; align-items: baseline; gap: 6px; margin-bottom: 2px; flex-wrap: wrap; }
+  .sense-meaning { font-size: 14px; color: var(--text); line-height: 1.5; }
+
+  /* メタ情報（形態素・語源など） */
+  .card-meta { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-bottom: 8px; }
+  .meta-item { display: flex; gap: 6px; align-items: baseline; font-size: 13px; }
+  .meta-lbl {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--text3);
+    border: 1px solid var(--border2);
+    border-radius: 4px;
+    padding: 1px 6px;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .meta-val { color: var(--text2); line-height: 1.5; }
+
+  /* 例文 */
+  .card-examples { display: flex; flex-direction: column; gap: 4px; }
+  .example-block { border-left: 2px solid var(--border2); padding: 4px 10px; }
+  .example-text { font-family: 'Noto Serif JP', serif; font-size: 13px; color: var(--text2); }
+  .example-trans { font-size: 12px; color: var(--text3); margin-top: 1px; }
+
+  .word-cat {
+    display: inline-block;
+    font-size: 11px; color: var(--text3);
+    border: 1px solid var(--border2);
+    border-radius: 4px; padding: 1px 7px;
+    margin-top: 4px;
+  }
+
+  .empty-state { text-align: center; padding: 4rem 2rem; color: var(--text3); }
+  .empty-state .big { font-family: 'Playfair Display', serif; font-size: 32px; margin-bottom: 8px; }
+  .empty-state p { font-size: 14px; line-height: 1.7; }
+
+  /* RULES */
+  .rule-card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--r2); padding: 1rem 1.25rem; margin-bottom: 10px; }
+  .rule-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+  .rule-title { font-size: 15px; font-weight: 500; }
+  .rule-cat-badge { font-family: 'JetBrains Mono', monospace; font-size: 10px; padding: 2px 10px; border-radius: 4px; background: rgba(155,127,212,0.15); color: var(--purple); border: 1px solid rgba(155,127,212,0.25); }
+  .rule-body { font-size: 13px; color: var(--text2); line-height: 1.8; white-space: pre-wrap; }
+  .rule-example { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--teal); margin-top: 8px; padding: 6px 10px; background: rgba(94,196,176,0.06); border-radius: 6px; border-left: 2px solid var(--teal); }
+
+  /* POS MANAGER */
+  .pos-manager-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 1rem; }
+  .pos-manager-row { display: flex; align-items: center; gap: 10px; background: var(--bg2); border: 1px solid var(--border); border-radius: var(--r); padding: 10px 14px; }
+  .pos-color-swatch { width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0; }
+  .pos-manager-name { flex: 1; font-size: 14px; }
+  .pos-manager-count { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text3); }
+  .color-picker-wrap { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+  .color-opt { width: 22px; height: 22px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; transition: transform 0.1s; }
+  .color-opt:hover { transform: scale(1.15); }
+  .color-opt.selected { border-color: #fff; }
+  .add-pos-row { display: flex; gap: 8px; }
+  .add-pos-row input { flex: 1; }
+
+  /* FIELD LABELS (カスタマイズ可能な見出し) */
+  .field-labels-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 1rem; }
+  .field-label-row { display: grid; grid-template-columns: 1fr 32px; align-items: center; gap: 6px; background: var(--bg2); border: 1px solid var(--border); border-radius: var(--r); padding: 8px 10px; margin-bottom: 6px; }
+  .field-label-input { width: 100%; background: var(--bg3); border: 1px solid var(--border); border-radius: 6px; padding: 5px 10px; color: var(--text); font-family: 'Noto Serif JP', serif; font-size: 13px; outline: none; }
+  .field-label-input:focus { border-color: var(--accent); }
+  .field-label-input::placeholder { color: var(--text3); }
+  .field-label-del { width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; background: none; border: 1px solid var(--border2); border-radius: 4px; color: var(--text3); cursor: pointer; font-size: 12px; transition: color 0.1s, border-color 0.1s; flex-shrink: 0; }
+  .field-label-del:hover { color: var(--coral); border-color: var(--coral); }
+
+  /* EXPORT */
+  .export-card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--r2); padding: 1.5rem; margin-bottom: 14px; }
+  .export-title { font-family: 'Playfair Display', serif; font-size: 16px; color: var(--accent); margin-bottom: 6px; }
+  .export-desc { font-size: 13px; color: var(--text2); margin-bottom: 1rem; line-height: 1.6; }
+
+  /* MODAL */
+  .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.65); backdrop-filter: blur(6px); z-index: 200; display: flex; align-items: center; justify-content: center; padding: 1rem; }
+  .overlay.hidden { display: none; }
+  .modal {
+    background: var(--bg2); border: 1px solid var(--border2); border-radius: 16px;
+    width: 100%; max-width: 580px; max-height: 95vh;
+    display: flex; flex-direction: column;
+    animation: modal-in 0.15s ease;
+    overflow: hidden;
+  }
+  .modal-body { padding: 0.75rem 1.1rem 0; overflow-y: auto; flex: 1; }
+  .modal-footer {
+    padding: 0.6rem 1.1rem;
+    border-top: 1px solid var(--border);
+    background: var(--bg2);
+    display: flex; justify-content: flex-end; gap: 10px;
+    flex-shrink: 0;
+  }
+  @keyframes modal-in { from { opacity: 0; transform: translateY(8px) scale(0.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
+  .modal-title { font-family: 'Playfair Display', serif; font-size: 16px; color: var(--accent); margin-bottom: 0.5rem; }
+  .field { margin-bottom: 5px; }
+  .field label { display: block; font-size: 10px; color: var(--text3); letter-spacing: 0.08em; text-transform: uppercase; font-family: 'JetBrains Mono', monospace; margin-bottom: 2px; }
+  .field input, .field select, .field textarea { width: 100%; background: var(--bg3); border: 1px solid var(--border); border-radius: var(--r); padding: 5px 9px; color: var(--text); font-family: 'Noto Serif JP', serif; font-size: 13px; outline: none; transition: border-color 0.15s; }
+  .field textarea { height: 56px; resize: vertical; }
+  .field input:focus, .field textarea:focus { border-color: var(--accent); }
+  .field input::placeholder, .field textarea::placeholder { color: var(--text3); }
+  .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 0; }
+  .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 0.75rem; padding-top: 0.6rem; border-top: 1px solid var(--border); }
+  .btn-cancel { padding: 5px 14px; border-radius: var(--r); border: 1px solid var(--border2); background: none; color: var(--text2); font-family: 'Noto Serif JP', serif; font-size: 13px; cursor: pointer; }
+  .btn-cancel:hover { background: var(--bg3); }
+  .btn-save { padding: 5px 16px; border-radius: var(--r); border: none; background: var(--accent); color: #1a1400; font-family: 'Noto Serif JP', serif; font-size: 13px; font-weight: 500; cursor: pointer; transition: background 0.15s; }
+  .btn-save:hover { background: var(--accent2); }
+
+  /* 語義内の説明 */
+  .sense-desc-wrap { margin-top: 5px; }
+  .sense-desc-input {
+    width: 100%; background: var(--bg2); border: 1px solid var(--border); border-radius: 6px;
+    padding: 5px 8px; color: var(--text2); font-family: 'Noto Serif JP', serif; font-size: 12px;
+    outline: none; resize: vertical; min-height: 36px; line-height: 1.5;
+    transition: border-color 0.15s;
+  }
+  .sense-desc-input:focus { border-color: var(--accent); color: var(--text); }
+  .sense-desc-input::placeholder { color: var(--text3); }
+
+  /* 複数義エディタ */
+  .senses-editor { display: flex; flex-direction: column; gap: 6px; margin-bottom: 5px; }
+  .sense-editor-block {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    padding: 8px 10px;
+    position: relative;
+  }
+  .sense-editor-header { display: flex; align-items: center; gap: 6px; margin-bottom: 5px; }
+  .sense-letter-badge { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text3); background: var(--bg2); border: 1px solid var(--border2); border-radius: 4px; padding: 1px 6px; }
+  .sense-editor-rows { display: flex; flex-direction: column; gap: 4px; }
+  .sense-pos-row { display: flex; gap: 6px; align-items: center; }
+  .sense-pos-row select { flex: 0 0 110px; background: var(--bg2); border: 1px solid var(--border); border-radius: 6px; padding: 5px 6px; color: var(--text2); font-family: 'Noto Serif JP', serif; font-size: 13px; outline: none; }
+  .sense-pos-row input { flex: 1; background: var(--bg2); border: 1px solid var(--border); border-radius: 6px; padding: 5px 8px; color: var(--text); font-family: 'Noto Serif JP', serif; font-size: 13px; outline: none; }
+  .sense-pos-row input:focus, .sense-pos-row select:focus { border-color: var(--accent); }
+  .sense-pos-row input::placeholder { color: var(--text3); }
+  .btn-icon { background: none; border: 1px solid var(--border2); border-radius: 4px; color: var(--text3); cursor: pointer; padding: 3px 7px; font-size: 11px; transition: color 0.1s, border-color 0.1s; }
+  .btn-icon:hover { color: var(--coral); border-color: var(--coral); }
+  .btn-add-small { background: none; border: 1px dashed var(--border2); border-radius: 6px; color: var(--text3); cursor: pointer; padding: 4px 10px; font-size: 12px; font-family: 'Noto Serif JP', serif; width: 100%; transition: border-color 0.1s, color 0.1s; margin-top: 4px; }
+  .btn-add-small:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* 例文エディタ */
+  .examples-editor { display: flex; flex-direction: column; gap: 4px; }
+  .example-editor-row { display: flex; gap: 6px; align-items: center; }
+  .example-editor-row input { flex: 1; background: var(--bg2); border: 1px solid var(--border); border-radius: 6px; padding: 5px 8px; color: var(--text); font-family: 'Noto Serif JP', serif; font-size: 13px; outline: none; }
+  .example-editor-row input:focus { border-color: var(--accent); }
+  .example-editor-row input::placeholder { color: var(--text3); }
+  .example-trans-input { font-family: 'Noto Serif JP', serif !important; font-size: 13px !important; }
+
+  /* 熟語エディタ */
+  .idioms-editor { display: flex; flex-direction: column; gap: 6px; margin-bottom: 4px; }
+  .idiom-editor-block { background: var(--bg3); border: 1px solid var(--border); border-radius: var(--r); padding: 8px 10px; display: flex; flex-direction: column; gap: 4px; position: relative; }
+  .idiom-editor-block input, .idiom-editor-block textarea { background: var(--bg2); border: 1px solid var(--border); border-radius: 6px; padding: 5px 8px; color: var(--text); font-family: 'Noto Serif JP', serif; font-size: 13px; outline: none; width: 100%; }
+  .idiom-editor-block input:focus, .idiom-editor-block textarea:focus { border-color: var(--accent); }
+  .idiom-editor-block textarea { resize: vertical; min-height: 36px; font-size: 12px; color: var(--text2); }
+
+  /* 熟語カード表示 */
+  .card-idioms { display: flex; flex-direction: column; gap: 5px; margin-top: 6px; border-top: 1px solid var(--border); padding-top: 6px; }
+  .idiom-item { font-size: 13px; }
+  .idiom-phrase { color: var(--text); font-family: 'Noto Serif JP', serif; }
+  .idiom-meaning { color: var(--text2); margin-left: 6px; }
+  .idiom-desc { font-size: 11px; color: var(--text3); margin-top: 1px; line-height: 1.5; }
+  input[type="file"]::file-selector-button { background: var(--bg3); border: 1px solid var(--border2); border-radius: var(--r); color: var(--text2); padding: 6px 12px; font-family: 'Noto Serif JP', serif; font-size: 12px; cursor: pointer; margin-right: 10px; }
+  .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(20px); background: var(--bg3); border: 1px solid var(--border2); color: var(--text); padding: 10px 22px; border-radius: 10px; font-size: 13px; font-family: 'Noto Serif JP', serif; box-shadow: 0 8px 24px rgba(0,0,0,0.4); z-index: 500; opacity: 0; pointer-events: none; transition: opacity 0.25s, transform 0.25s; }
+  .toast.visible { opacity: 1; transform: translateX(-50%) translateY(0); }
+  /* 例文集 */
+  .sentence-card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--r2); padding: 1rem 1.25rem; margin-bottom: 8px; position: relative; cursor: pointer; transition: border-color 0.15s, background 0.1s; }
+  .sentence-card:hover { border-color: var(--border2); background: var(--bg3); }
+  .sentence-text { font-family: 'Noto Serif JP', serif; font-size: 18px; color: var(--text); margin-bottom: 4px; white-space: pre-wrap; }
+  .sentence-trans { font-size: 13px; color: var(--text2); margin-bottom: 8px; white-space: pre-wrap; }
+  .sentence-note { font-size: 12px; color: var(--text3); margin-top: 4px; white-space: pre-wrap; }
+  .sentence-words { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
+  .sentence-word-link { font-size: 11px; padding: 2px 8px; border-radius: 4px; border: 1px solid var(--border2); color: var(--accent); cursor: pointer; background: rgba(201,169,110,0.08); font-family: 'Noto Serif JP', serif; transition: background 0.1s; }
+  .sentence-word-link:hover { background: rgba(201,169,110,0.2); }
+  select option { background: var(--bg2); }
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--bg3); border-radius: 3px; }
+
+  .section-divider { font-size: 10px; color: var(--text3); font-family: 'JetBrains Mono', monospace; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 6px; margin-top: 2px; padding-bottom: 4px; border-bottom: 1px solid var(--border); }
+
+  /* 自動入力インジケーター */
+  .roman-auto-hint {
+    font-size: 10px; color: var(--teal); font-family: 'JetBrains Mono', monospace;
+    margin-top: 4px; opacity: 0; transition: opacity 0.2s;
+    letter-spacing: 0.04em;
+  }
+  .roman-auto-hint.visible { opacity: 1; }
+</style>
+</head>
+<body>
+<div class="toast" id="toast"></div>
+
+<header class="header">
+  <div class="logo">
+    <div class="logo-mark">✦</div>
+    人工言語辞書
+  </div>
+  <div style="display:flex;align-items:center;gap:8px">
+    <span id="sync-status" title="同期状態" style="font-size:14px;width:20px;text-align:center;cursor:default;color:var(--text3)">–</span>
+  </div>
+</header>
+
+<div class="layout">
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <span class="sidebar-header-label">辞書</span>
+      <button class="dict-icon-btn" onclick="addDictPrompt()" title="新しい辞書を作成">＋</button>
+    </div>
+    <div class="dict-list" id="dict-list"></div>
+  </aside>
+
+  <main class="main">
+    <div class="main-sticky">
+      <div class="tabbar">
+        <button class="tabbar-btn active" onclick="switchTab('dict',this)">辞書</button>
+        <button class="tabbar-btn" onclick="switchTab('examples',this)">例文</button>
+        <button class="tabbar-btn" onclick="switchTab('rules',this)">規則</button>
+        <button class="tabbar-btn" onclick="switchTab('settings',this)">設定</button>
+      </div>
+
+      <!-- 例文集タブの固定部分 -->
+      <div id="tab-examples-sticky" style="display:none">
+        <div style="margin-bottom:0.75rem">
+          <button class="btn-add" onclick="openAddSentence()">＋ 例文を追加</button>
+        </div>
+      </div>
+
+      <!-- 辞書タブの固定部分 -->
+      <div id="tab-dict-sticky">
+        <div class="search-row">
+          <div class="search-wrap">
+            <span class="search-icon">🔍</span>
+            <input type="text" id="search-input" placeholder="" oninput="renderWords()">
+          </div>
+          <select onchange="saveScrollAndSort();renderWords()" id="sort-select">
+            <option value="az">A → Z</option>
+            <option value="za">Z → A</option>
+            <option value="new">新しい順</option>
+            <option value="old">古い順</option>
+          </select>
+        </div>
+        <div class="search-scope-bar" id="search-scope-bar"></div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem">
+          <button class="btn-add" onclick="openAddWord()">＋ 単語を追加</button>
+          <span id="word-count-display" style="font-size:13px;color:var(--text3);font-family:'Noto Serif JP',serif"></span>
+        </div>
+      </div>
+
+      <!-- 規則タブの固定部分 -->
+      <div id="tab-rules-sticky" style="display:none">
+        <div style="margin-bottom:0.75rem">
+          <button class="btn-add" onclick="openAddRule()">＋ 規則を追加</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="main-scroll" id="main-scroll-area" onscroll="saveScrollAndSort()">
+      <div id="tab-dict">
+        <div class="word-list" id="word-grid"></div>
+      </div>
+
+      <div id="tab-rules" style="display:none">
+        <div id="rules-list"></div>
+      </div>
+
+      <div id="tab-examples" style="display:none">
+        <div id="sentences-list"></div>
+      </div>
+
+    <!-- SETTINGS TAB -->
+    <div id="tab-settings" style="display:none">
+      <div style="display:flex;gap:4px;margin-bottom:1.25rem;flex-wrap:wrap">
+        <button class="tabbar-btn active" id="stab-btn-pos" onclick="switchSettingsTab('pos',this)">品詞</button>
+        <button class="tabbar-btn" id="stab-btn-fieldlabels" onclick="switchSettingsTab('fieldlabels',this)">見出し</button>
+        <button class="tabbar-btn" id="stab-btn-phoneme" onclick="switchSettingsTab('phoneme',this)">発音変換</button>
+        <button class="tabbar-btn" id="stab-btn-fontsetting" onclick="switchSettingsTab('fontsetting',this)">フォント</button>
+        <button class="tabbar-btn" id="stab-btn-info" onclick="switchSettingsTab('info',this)">情報</button>
+        <button class="tabbar-btn" id="stab-btn-export" onclick="switchSettingsTab('export',this)">エクスポート</button>
+      </div>
+      <div id="stab-pos" style="display:none">
+        <div class="pos-manager-list" id="pos-manager-list"></div>
+        <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:1.25rem">
+          <div style="font-size:13px;color:var(--text2);margin-bottom:10px;font-weight:500">新しい品詞を追加</div>
+          <div class="add-pos-row" style="margin-bottom:10px">
+            <input type="text" id="new-pos-name" placeholder="" style="flex:1;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:9px 12px;color:var(--text);font-family:'Noto Serif JP',serif;font-size:13px;outline:none">
+          </div>
+          <button class="btn-save" onclick="addNewPOS()">追加</button>
+        </div>
+      </div>
+      <div id="stab-fieldlabels" style="display:none">
+        <div style="margin-bottom:1rem">
+          <p style="font-size:13px;color:var(--text2);margin-bottom:4px">単語カードのメタ情報フィールドを自由に追加・編集・削除できます。</p>
+          <p style="font-size:12px;color:var(--text3)">見出し名を空欄にするとそのフィールドは非表示になります。</p>
+        </div>
+        <div class="field-labels-list" id="field-labels-list"></div>
+        <div style="display:flex;gap:10px;margin-top:10px">
+          <button class="btn-add-small" style="width:auto;padding:6px 16px" onclick="addFieldLabel()">&#65291; フィールドを追加</button>
+          <button class="btn-save" onclick="saveFieldLabels()">保存</button>
+        </div>
+      </div>
+      <div id="stab-phoneme" style="display:none">
+      <div style="margin-bottom:0.75rem;font-size:12px;color:var(--text3);font-family:'JetBrains Mono',monospace;line-height:1.9;font-variant-ligatures:none">
+        <div><code style="color:var(--text2)">a = æ</code>　基本（長い文字列優先）　<code style="color:var(--text2)">@A = a e i o u</code>　クラス定義　<code style="color:var(--text2)">#</code>　コメント</div>
+        <div><code style="color:var(--text2)">a^ = æ</code>　語頭　<code style="color:var(--text2)">^a = æ</code>　語末　<code style="color:var(--text2)">!@A n = ...</code>　直前がクラスA以外　<code style="color:var(--text2)">n !@A = n</code>　直後がクラスA以外</div>
+        <div><code style="color:var(--text2)">@A n = ...</code>　直前がクラスA　<code style="color:var(--text2)">n@A = ŋ</code>　直後がクラスA　<code style="color:var(--text2)">@A n^ = ŋ</code>　直前がクラスAかつ語末　<code style="color:var(--text2)">n^ @A = ŋ</code>　語頭かつ直後がクラスA</div>
+        <div><code style="color:var(--text2)">@A[2] = +ː</code>　クラスAのn番目出現にsuffixを追加　<code style="color:var(--text2)">[if:!=@A] @A[2] = +ː</code>　n番目ヒットがクラスAでない（@A[n]専用）</div>
+        <div><code style="color:var(--text2)">[if:$3] a = æ</code>　単語が3文字のとき　<code style="color:var(--text2)">[if:^a]</code>　aで終わる　<code style="color:var(--text2)">[if:^@A]</code>　クラスAで終わる　<code style="color:var(--text2)">[if:^@A2]</code>　クラスAが末尾に2連続</div>
+        <div><code style="color:var(--text2)">[if:@A2]</code>　クラスAが2個　<code style="color:var(--text2)">[if:$3,@A2]</code>　AND条件（カンマ区切り）</div>
+        <div><code style="color:var(--text2)">[if:!=...]</code>　条件の否定　例：<code style="color:var(--text2)">[if:!=^@A]</code>　Aで終わらない　<code style="color:var(--text2)">[if:!=^@A2]</code>　A2連続で終わらない　<code style="color:var(--text2)">[if:!=@A2]</code>　Aが2個でない　<code style="color:var(--text2)">[if:!=$3]</code>　単語が3文字でない</div>
+        <div><code style="color:var(--text2)">[if:@A[1]~@A[2];@B2]</code>　Aの1番目と2番目の間にBがちょうど2個　<code style="color:var(--text2)">@A2+</code>　2個以上　<code style="color:var(--text2)">@A2-</code>　2個以下　<code style="color:var(--text2)">!=@A2</code>　2個でない</div>
+      </div>
+      <textarea id="phoneme-textarea" spellcheck="false"
+        style="width:100%;height:280px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:14px 16px;color:var(--text);font-family:'JetBrains Mono',monospace;font-size:13px;line-height:1.8;outline:none;resize:vertical;transition:border-color 0.15s;font-variant-ligatures:none"
+        placeholder=""
+        oninput="onPhonemeTextareaInput(this)"
+        onfocus="this.style.borderColor='var(--accent)'"
+        onblur="this.style.borderColor='var(--border)'"></textarea>
+      <div style="display:flex;justify-content:flex-end;margin-top:10px">
+        <button class="btn-save" onclick="savePhonemeRules()">保存</button>
+      </div>
+      <div style="margin-top:1.5rem;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:1rem">
+        <div style="font-size:12px;color:var(--text3);margin-bottom:8px;font-family:'JetBrains Mono',monospace;letter-spacing:0.06em;text-transform:uppercase">プレビュー</div>
+        <div style="display:flex;gap:10px;align-items:center">
+          <input type="text" id="phoneme-preview-input" placeholder="" oninput="updatePhonemePreview()" style="flex:1;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:8px 12px;color:var(--text);font-family:'Noto Serif JP',serif;font-size:14px;outline:none;">
+          <span style="color:var(--text3);font-size:18px">→</span>
+          <div id="phoneme-preview-out" style="flex:1;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:8px 12px;color:var(--teal);font-family:'Noto Serif JP',serif;font-size:14px;min-height:38px"></div>
+        </div>
+      </div>
+      </div><!-- /stab-phoneme -->
+      <div id="stab-fontsetting" style="display:none">
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:1.1rem;margin-bottom:12px">
+        <div class="section-divider">フォントファイル</div>
+        <div class="field">
+          <label>フォント名</label>
+          <input type="text" id="lf-name" placeholder="" style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:6px 10px;color:var(--text);font-family:'Noto Serif JP',serif;font-size:13px;outline:none;width:100%">
+        </div>
+        <div class="field">
+          <label>ファイル (.ttf / .woff / .woff2 / .otf)</label>
+          <input type="file" id="lf-file" accept=".ttf,.woff,.woff2,.otf">
+        </div>
+        <button class="btn-save" style="margin-top:6px" onclick="applyLocalFont()">適用</button>
+      </div>
+
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:1.1rem;margin-bottom:12px">
+        <div class="section-divider">現在のフォント</div>
+        <div id="font-current-info" style="font-size:13px;color:var(--text2);margin-bottom:10px"></div>
+        <input type="text" id="font-preview-text" value="abcdefg" style="width:100%;font-size:22px;color:var(--text);margin-bottom:10px;padding:8px 12px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);outline:none" placeholder="">
+
+        <div style="margin-bottom:12px">
+          <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+            <span style="font-size:11px;color:var(--text3);font-family:'JetBrains Mono',monospace;letter-spacing:0.06em;text-transform:uppercase">文字サイズ</span>
+            <span id="fs-value" style="font-size:11px;color:var(--text2);font-family:'JetBrains Mono',monospace">22px</span>
+          </div>
+          <input type="range" id="fs-slider" min="12" max="48" step="1" value="22"
+            oninput="updateFontSize(this.value)"
+            style="width:100%;accent-color:var(--accent);cursor:pointer">
+        </div>
+        <div style="margin-bottom:12px">
+          <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+            <span style="font-size:11px;color:var(--text3);font-family:'JetBrains Mono',monospace;letter-spacing:0.06em;text-transform:uppercase">字間</span>
+            <span id="ls-value" style="font-size:11px;color:var(--text2);font-family:'JetBrains Mono',monospace">0.00em</span>
+          </div>
+          <input type="range" id="ls-slider" min="-0.5" max="0.5" step="0.01" value="0"
+            oninput="updateLetterSpacing(this.value)"
+            style="width:100%;accent-color:var(--accent);cursor:pointer">
+        </div>
+        <div style="margin-bottom:12px">
+          <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+            <span style="font-size:11px;color:var(--text3);font-family:'JetBrains Mono',monospace;letter-spacing:0.06em;text-transform:uppercase">単語間隔</span>
+            <span id="ws-value" style="font-size:11px;color:var(--text2);font-family:'JetBrains Mono',monospace">0.00em</span>
+          </div>
+          <input type="range" id="ws-slider" min="-0.5" max="2" step="0.05" value="0"
+            oninput="updateWordSpacing(this.value)"
+            style="width:100%;accent-color:var(--accent);cursor:pointer">
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn-save" onclick="saveFontSettings()">保存</button>
+          <button class="btn-cancel" onclick="clearFontSettings()">リセット</button>
+        </div>
+      </div>
+
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:1.1rem">
+        <div class="section-divider">転写</div>
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:13px;color:var(--text2);margin-bottom:8px">
+          <input type="checkbox" id="show-roman-word-toggle" onchange="toggleRomanWord(this.checked)" style="width:16px;height:16px;cursor:pointer;accent-color:var(--accent)">
+          単語カードに転写を表示する
+        </label>
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:13px;color:var(--text2)">
+          <input type="checkbox" id="show-roman-sentence-toggle" onchange="toggleRomanSentence(this.checked)" style="width:16px;height:16px;cursor:pointer;accent-color:var(--accent)">
+          例文に転写を表示する
+        </label>
+      </div>
+      </div><!-- /stab-fontsetting -->
+      <div id="stab-info" style="display:none">
+        <div id="char-pie-container"></div>
+        <div id="char-freq-container"></div>
+      </div>
+      <div id="stab-export" style="display:none">
+      <div class="export-card">
+        <div class="export-title">JSON エクスポート</div>
+        <p class="export-desc">辞書・規則・品詞定義のすべてをJSONファイルとして保存します。</p>
+        <button class="btn-save" onclick="exportJSON()">ダウンロード</button>
+      </div>
+      <div class="export-card">
+        <div class="export-title">JSON インポート</div>
+        <p class="export-desc">既存のJSONファイルを読み込みます。現在のデータは上書きされます。</p>
+        <input type="file" accept=".json" onchange="importJSON(event)">
+      </div>
+      </div><!-- /stab-export -->
+    </div><!-- /tab-settings -->
+  </main>
+</div>
+
+<!-- ADD/EDIT SENTENCE MODAL -->
+<div class="overlay hidden" id="sentence-modal">
+  <div class="modal" style="max-width:600px">
+    <div class="modal-body">
+      <div class="modal-title" id="modal-sentence-title">例文を追加</div>
+      <div class="field"><label>例文</label><textarea id="s-text" style="height:80px" placeholder=""></textarea></div>
+      <div class="field"><label>訳</label><textarea id="s-trans" style="height:60px" placeholder=""></textarea></div>
+      <div class="field">
+        <label>関連単語（スペース区切り）</label>
+        <input type="text" id="s-words" placeholder="" oninput="updateSentenceWordsPreview()">
+        <div id="s-words-preview" style="display:flex;flex-wrap:wrap;gap:4px;margin-top:6px"></div>
+      </div>
+      <div class="field"><label>メモ（任意）</label><textarea id="s-note" style="height:50px" placeholder=""></textarea></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-cancel" onclick="closeModal('sentence-modal')">キャンセル</button>
+      <button class="btn-save" onclick="saveSentence()">保存</button>
+    </div>
+  </div>
+</div>
+
+
+<div class="overlay hidden" id="word-modal">
+  <div class="modal" autocomplete="off">
+    <div class="modal-body">
+      <div class="modal-title" id="modal-word-title">単語を追加</div>
+
+      <div style="margin-bottom:5px">
+        <div class="form-row">
+          <div class="field" style="margin-bottom:0"><label>綴り</label><input type="text" id="f-word" placeholder="" oninput="autoFillRoman()"></div>
+          <div class="field" style="margin-bottom:0">
+            <label>発音</label>
+            <input type="text" id="f-roman" placeholder="" oninput="onRomanManualEdit()">
+            <div class="roman-auto-hint" id="roman-auto-hint">⟳ 自動入力</div>
+          </div>
+        </div>
+      </div>
+      <div class="field"><label>タグ</label><input type="text" id="f-cat" placeholder=""></div>
+
+      <!-- 複数義エディタ -->
+      <div style="margin-bottom:8px">
+        <div class="section-divider">意味</div>
+        <div class="senses-editor" id="senses-editor"></div>
+        <button class="btn-add-small" onclick="addSenseBlock()">＋ 意味を追加</button>
+      </div>
+
+      <!-- メタフィールド（カスタム見出し） -->
+      <div style="margin-bottom:8px">
+        <div class="section-divider">情報</div>
+        <div id="meta-fields-editor"></div>
+      </div>
+
+      <!-- 例文エディタ -->
+      <div style="margin-bottom:0.75rem">
+        <div class="section-divider" id="examples-section-label">例文</div>
+        <div class="examples-editor" id="examples-editor"></div>
+        <button class="btn-add-small" onclick="addExampleRow()">＋ 例文を追加</button>
+      </div>
+
+      <!-- 熟語エディタ -->
+      <div style="margin-bottom:0.75rem">
+        <div class="section-divider">熟語</div>
+        <div class="idioms-editor" id="idioms-editor"></div>
+        <button class="btn-add-small" onclick="addIdiomRow()">＋ 熟語を追加</button>
+      </div>
+
+      <!-- 単語全体の説明 -->
+      <div style="margin-bottom:0.75rem">
+        <div class="section-divider">説明</div>
+        <textarea id="f-note" class="sense-desc-input" placeholder="" style="width:100%"></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-cancel" onclick="closeModal('word-modal')">キャンセル</button>
+      <button class="btn-save" onclick="saveWord()">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- ADD/EDIT RULE MODAL -->
+<div class="overlay hidden" id="rule-modal">
+  <div class="modal" style="max-width:680px">
+    <div class="modal-body">
+      <div class="modal-title" id="modal-rule-title">規則を追加</div>
+      <div class="field"><label>タイトル</label><input type="text" id="r-title" placeholder=""></div>
+      <div class="field"><label>内容</label><textarea id="r-body" style="height:300px" placeholder=""></textarea></div>
+      <div class="field"><label>例（任意）</label><input type="text" id="r-ex" placeholder=""></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-cancel" onclick="closeModal('rule-modal')">キャンセル</button>
+      <button class="btn-save" onclick="saveRule()">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- EDIT POS MODAL -->
+<div class="overlay hidden" id="pos-modal">
+  <div class="modal" style="max-width:400px">
+    <div class="modal-body">
+      <div class="modal-title">品詞を編集</div>
+      <div class="field"><label>品詞名</label><input type="text" id="ep-name" placeholder=""></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-cancel" onclick="closeModal('pos-modal')">キャンセル</button>
+      <button class="btn-save" onclick="saveEditPOS()">保存</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const DICTS_KEY = 'conlang_dicts_v1';      // [{id, name}]
+const ACTIVE_KEY = 'conlang_active_dict_v1'; // id string
+
+const PALETTE = [
+  '#6a9ee0','#7ac47a','#c9a96e','#e07a6a','#9b7fd4',
+  '#5ec4b0','#d4a0c4','#e0b86a','#7aa8c4','#c47a9b',
+  '#a0c47a','#7ac4b8','#c4a07a','#9b9bd4','#c47a7a',
+  '#6ac49b','#b87ac4','#c4c47a','#7a9bc4','#c4907a'
+];
+
+const DEFAULT_POS = [
+  { id: 'pos_blank', name: ' ' },
+];
+
+const DEFAULT_FIELD_LABELS = [
+  { key: 'morpheme', label: '形態素', placeholder: '例: -eth（接尾辞）' },
+  { key: 'etymology', label: '語源', placeholder: '例: 古語 kael より派生' },
+  { key: 'note', label: 'メモ', placeholder: '自由記述' },
+];
+
+// ── 辞書リスト管理 ────────────────────────────────────────
+let dicts = [];      // [{id, name}]
+let activeDictId = '';
+
+function storageKey(dictId, suffix) { return `cld_${dictId}_${suffix}`; }
+
+function loadDicts() {
+  try { dicts = JSON.parse(localStorage.getItem(DICTS_KEY)) || []; } catch { dicts = []; }
+  // 既存データ（旧単一辞書）を "デフォルト" として移行
+  if (!dicts.length) {
+    const defaultId = 'dict_default';
+    dicts = [{ id: defaultId, name: 'デフォルト' }];
+    // 旧データをデフォルト辞書に移行
+    const oldWords   = localStorage.getItem('conlang_words_v2') || localStorage.getItem('conlang_words_v1');
+    const oldRules   = localStorage.getItem('conlang_rules_v1');
+    const oldPos     = localStorage.getItem('conlang_pos_v1');
+    const oldLabels  = localStorage.getItem('conlang_fieldlabels_v1');
+    if (oldWords)  localStorage.setItem(storageKey(defaultId, 'words'), oldWords);
+    if (oldRules)  localStorage.setItem(storageKey(defaultId, 'rules'), oldRules);
+    if (oldPos)    localStorage.setItem(storageKey(defaultId, 'pos'),   oldPos);
+    if (oldLabels) localStorage.setItem(storageKey(defaultId, 'labels'),oldLabels);
+    saveDicts();
+  }
+  try { activeDictId = localStorage.getItem(ACTIVE_KEY) || ''; } catch {}
+  if (!dicts.find(d => d.id === activeDictId)) activeDictId = dicts[0].id;
+}
+
+function saveDicts() {
+  localStorage.setItem(DICTS_KEY, JSON.stringify(dicts));
+  localStorage.setItem(ACTIVE_KEY, activeDictId);
+}
+
+function activeDict() { return dicts.find(d => d.id === activeDictId) || dicts[0]; }
+
+// ── 辞書ごとのデータ ──────────────────────────────────────
+let words = [], rules = [], posList = [], fieldLabels = [], phonemeRules = [], sentences = [];
+let fontSettings = { type: null, name: null, letterSpacing: 0, wordSpacing: 0, fontSize: 22 }; // 辞書ごとのフォント設定
+let showRoman = false;
+let showRomanWord = false;
+let showRomanSentence = false;
+let editingId = null, editingRuleId = null, editingPOSId = null;
+let sideFilter = '__all__';
+let newPOSColorSel = PALETTE[0];
+let editPOSColorSel = PALETTE[0];
+
+function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2); }
+let _toastTimer = null;
+function showToast(msg) {
+  const el = document.getElementById('toast');
+  if (!el) return;
+  el.textContent = msg;
+  el.classList.add('visible');
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => el.classList.remove('visible'), 1800);
+}
+function esc(s) { return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function escDim(s) {
+  // エスケープしてから、括弧で囲まれた範囲（入れ子対応）を薄字にする
+  // 上付き数字をsupタグに統一（グリフの高さずれ対策）
+  const supMap = {'⁰':'0','¹':'1','²':'2','³':'3','⁴':'4','⁵':'5','⁶':'6','⁷':'7','⁸':'8','⁹':'9'};
+  const normalized = (s||'').replace(/[⁰¹²³⁴⁵⁶⁷⁸⁹]+/g, m => `\x00SUP\x00${m.split('').map(c=>supMap[c]).join('')}\x00/SUP\x00`);
+  const escaped = esc(normalized)
+    .replace(/\x00SUP\x00/g, '<sup style="font-size:0.65em;vertical-align:0.5em;line-height:0">')
+    .replace(/\x00\/SUP\x00/g, '</sup>');
+  const pairs = { '（':'）', '(':')', '[':']', '{':'}', '【':'】', '〈':'〉' };
+  const opens = new Set(Object.keys(pairs));
+  const closes = new Set(Object.values(pairs));
+  // 開き括弧に対応する閉じ括弧を返すマップ
+  let result = '';
+  let i = 0;
+  while (i < escaped.length) {
+    const ch = escaped[i];
+    if (opens.has(ch)) {
+      // 対応する閉じ括弧を探す（入れ子カウント）
+      const close = pairs[ch];
+      let depth = 1, j = i + 1;
+      while (j < escaped.length && depth > 0) {
+        if (escaped[j] === ch) depth++;
+        else if (escaped[j] === close) depth--;
+        j++;
+      }
+      if (depth === 0) {
+        // i〜j-1 が括弧全体
+        result += '<span style="color:var(--text3)">' + escaped.slice(i, j) + '</span>';
+        i = j;
+      } else {
+        result += ch;
+        i++;
+      }
+    } else {
+      result += ch;
+      i++;
+    }
+  }
+  return result;
+}
+function hexToRgb(hex) { if (!hex || !hex.startsWith('#')) return '90,90,90'; const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16); return `${r},${g},${b}`; }
+
+// ── Supabase 同期 ──────────────────────────────────────────
+const SUPABASE_URL = 'https://cuupijhdwlzyuchrodrh.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_9Y6C64qU8uc0xJ2-0TOyiA_kLbIqKiP';
+const _sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+let _syncEnabled = true;
+let _syncTimer = null;
+
+// Supabaseから全データ取得してIndexedDBに書き込む
+async function syncFromCloud() {
+  if (!_syncEnabled) return;
+  try {
+    const { data, error } = await _sb.from('dict_data').select('key,value');
+    if (error) { console.warn('sync from cloud error:', error.message); return; }
+    if (!data || data.length === 0) return;
+    for (const row of data) {
+      await idbSet(row.key, row.value);
+    }
+  } catch(e) { console.warn('syncFromCloud:', e); }
+}
+
+// IndexedDBの全データをSupabaseにupsert
+async function syncToCloud(key, value) {
+  if (!_syncEnabled) return;
+  try {
+    const { error } = await _sb.from('dict_data').upsert({ key, value }, { onConflict: 'key' });
+    if (error) console.warn('sync to cloud error:', error.message);
+  } catch(e) { console.warn('syncToCloud:', e); }
+}
+
+// 同期状態インジケーター
+function setSyncStatus(status) {
+  const el = document.getElementById('sync-status');
+  if (!el) return;
+  if (status === 'syncing') { el.textContent = '↑'; el.title = '同期中…'; el.style.color = 'var(--accent)'; }
+  else if (status === 'ok')  { el.textContent = '✓'; el.title = '同期済み'; el.style.color = 'var(--teal)'; }
+  else if (status === 'err') { el.textContent = '!'; el.title = '同期エラー'; el.style.color = 'var(--coral)'; }
+}
+
+// ── IndexedDB ─────────────────────────────────────────────
+const DB_NAME = 'conlang_db';
+const DB_VERSION = 1;
+const DB_STORE = 'kv';
+let _db = null;
+
+function openDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    req.onupgradeneeded = e => e.target.result.createObjectStore(DB_STORE);
+    req.onsuccess = e => { _db = e.target.result; resolve(_db); };
+    req.onerror = e => reject(e);
+  });
+}
+
+function idbGet(key) {
+  return openDB().then(db => new Promise((resolve, reject) => {
+    const tx = db.transaction(DB_STORE, 'readonly');
+    const req = tx.objectStore(DB_STORE).get(key);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = reject;
+  }));
+}
+
+function idbSet(key, val) {
+  return openDB().then(db => new Promise((resolve, reject) => {
+    const tx = db.transaction(DB_STORE, 'readwrite');
+    const req = tx.objectStore(DB_STORE).put(val, key);
+    req.onsuccess = resolve;
+    req.onerror = reject;
+  }));
+}
+
+function idbGetJSON(key, fallback) {
+  return idbGet(key).then(v => {
+    if (v === undefined || v === null) return fallback;
+    try { return typeof v === 'string' ? JSON.parse(v) : v; } catch { return fallback; }
+  });
+}
+
+async function loadAsync() {
+  const id = activeDictId;
+  // localStorage から IndexedDB へのマイグレーション
+  for (const suffix of ['words','rules','pos','labels','phoneme','phoneme_raw','font','showRoman']) {
+    const lsKey = storageKey(id, suffix);
+    const lsVal = localStorage.getItem(lsKey);
+    if (lsVal !== null) {
+      await idbSet(lsKey, lsVal);
+      localStorage.removeItem(lsKey);
+    }
+  }
+
+  let rawWords = await idbGetJSON(storageKey(id,'words'), []);
+  words = rawWords.map(w => {
+    if (!w.senses) {
+      w.senses = [{ id: uid(), rows: [{ id: uid(), pos: w.pos||'', meaning: w.meaning||'' }] }];
+      w.meta = {};
+      if (w.note) w.meta.note = w.note;
+      w.examples = w.example ? [{ id: uid(), text: w.example, trans: '' }] : [];
+    }
+    return w;
+  });
+  rules = await idbGetJSON(storageKey(id,'rules'), []);
+  const pl = await idbGetJSON(storageKey(id,'pos'), null);
+  posList = (pl && pl.length) ? pl : DEFAULT_POS.map(p => ({...p}));
+  const fl = await idbGetJSON(storageKey(id,'labels'), null);
+  fieldLabels = (fl && fl.length) ? fl : DEFAULT_FIELD_LABELS.map(f => ({...f}));
+
+  const rawText = await idbGet(storageKey(id,'phoneme_raw'));
+  if (rawText != null) {
+    phonemeRules = parsePhonemeText(rawText);
+    _phonemeRawText = rawText;
+  } else {
+    const pr = await idbGetJSON(storageKey(id,'phoneme'), []);
+    _phonemeRawText = serializePhonemeRules(pr);
+    phonemeRules = parsePhonemeText(_phonemeRawText);
+  }
+
+  const fs = await idbGetJSON(storageKey(id,'font'), { type: null, name: null, letterSpacing: 0 });
+  fontSettings = fs;
+  if (fontSettings.letterSpacing === undefined) fontSettings.letterSpacing = 0;
+  if (fontSettings.wordSpacing === undefined) fontSettings.wordSpacing = 0;
+  if (fontSettings.fontSize === undefined) fontSettings.fontSize = 22;
+  const savedDataUrl = await idbGet(storageKey(id,'font_data'));
+  if (savedDataUrl) _fontDataUrl = savedDataUrl;
+
+  sentences = await idbGetJSON(storageKey(id,'sentences'), []);
+
+  const sr = await idbGet(storageKey(id,'showRoman'));
+  showRoman = (sr != null) ? JSON.parse(sr) : false;
+  showRomanWord = showRoman;
+  const srw = await idbGet(storageKey(id,'showRomanWord'));
+  if (srw != null) showRomanWord = JSON.parse(srw);
+  const srs = await idbGet(storageKey(id,'showRomanSentence'));
+  showRomanSentence = (srs != null) ? JSON.parse(srs) : false;
+}
+
+async function persistAsync() {
+  const id = activeDictId;
+  try {
+    const pairs = [
+      [storageKey(id,'words'),        JSON.stringify(words)],
+      [storageKey(id,'rules'),        JSON.stringify(rules)],
+      [storageKey(id,'pos'),          JSON.stringify(posList)],
+      [storageKey(id,'labels'),       JSON.stringify(fieldLabels)],
+      [storageKey(id,'phoneme'),      JSON.stringify(phonemeRules)],
+      [storageKey(id,'phoneme_raw'),  _phonemeRawText || ''],
+      [storageKey(id,'sentences'),    JSON.stringify(sentences)],
+      [storageKey(id,'showRoman'),    JSON.stringify(showRomanWord)],
+      [storageKey(id,'showRomanWord'),JSON.stringify(showRomanWord)],
+      [storageKey(id,'showRomanSentence'),JSON.stringify(showRomanSentence)],
+    ];
+    const fontToSave = { ...fontSettings };
+    delete fontToSave.dataUrl;
+    pairs.push([storageKey(id,'font'), JSON.stringify(fontToSave)]);
+
+    for (const [k, v] of pairs) await idbSet(k, v);
+    if (_fontDataUrl) await idbSet(storageKey(id,'font_data'), _fontDataUrl);
+
+    // クラウド同期（フォントデータは除く）
+    setSyncStatus('syncing');
+    try {
+      const upserts = pairs.map(([k, v]) => ({ key: k, value: v }));
+      // dicts/active も同期
+      upserts.push({ key: '__dicts__', value: JSON.stringify(dicts) });
+      upserts.push({ key: '__active__', value: activeDictId });
+      const { error } = await _sb.from('dict_data').upsert(upserts, { onConflict: 'key' });
+      if (error) throw error;
+      setSyncStatus('ok');
+    } catch(e) {
+      setSyncStatus('err');
+      console.warn('cloud sync failed:', e);
+    }
+  } catch(e) {
+    alert('保存に失敗しました: ' + e.message);
+  }
+}
+
+// 既存コードとの互換性のため同期的に見せる薄いラッパー
+function load() {} // loadAsync に置き換え
+function persist() { persistAsync(); }
+
+// ── 辞書リスト UI ─────────────────────────────────────────
+function renderDictList() {
+  const el = document.getElementById('dict-list');
+  el.innerHTML = dicts.map(d => {
+    const cnt = (() => {
+      try { return (JSON.parse(localStorage.getItem(storageKey(d.id,'words'))) || []).length; } catch { return 0; }
+    })();
+    const isActive = d.id === activeDictId;
+    return `<button class="dict-item${isActive ? ' active' : ''}" onclick="switchDict('${esc(d.id)}')">
+      <span class="dict-item-name">${esc(d.name)}</span>
+      <span class="dict-item-actions" onclick="event.stopPropagation()">
+        <button class="dict-item-btn" onclick="renameDictPrompt('${esc(d.id)}')">編集</button>
+        <button class="dict-item-btn del" onclick="deleteDict('${esc(d.id)}')">削除</button>
+      </span>
+    </button>`;
+  }).join('');
+  // 辞書名をメインタイトルにも反映
+  document.title = activeDict().name + ' — 人工言語辞書';
+}
+
+function switchDict(id) {
+  activeDictId = id;
+  saveDicts();
+  sideFilter = '__all__';
+  sessionStorage.removeItem('scrollTop');
+  const scroll = document.getElementById('main-scroll-area');
+  if (scroll) scroll.scrollTop = 0;
+  loadAsync().then(() => {
+    restoreFontFromSettings();
+    renderDictList();
+    renderSearchScopeBar();
+    renderWords(); updateStats();
+    switchTab('dict', document.querySelector('.tabbar-btn'));
+  });
+}
+
+function addDictPrompt() {
+  const name = prompt('新しい辞書の名前を入力してください:', '新しい辞書');
+  if (!name || !name.trim()) return;
+  const id = 'dict_' + uid();
+  dicts.push({ id, name: name.trim() });
+  activeDictId = id;
+  saveDicts();
+  loadAsync().then(() => {
+    renderDictList();
+    sideFilter = '__all__';
+    renderSearchScopeBar();
+    renderWords(); updateStats();
+    switchTab('dict', document.querySelector('.tabbar-btn'));
+  });
+}
+
+function renameDictPrompt(id) {
+  const d = id ? dicts.find(x => x.id === id) : activeDict();
+  if (!d) return;
+  const name = prompt('辞書の新しい名前:', d.name);
+  if (!name || !name.trim()) return;
+  d.name = name.trim();
+  saveDicts();
+  renderDictList();
+}
+
+function deleteDict(id) {
+  if (dicts.length <= 1) { alert('最後の辞書は削除できません。'); return; }
+  const d = dicts.find(x => x.id === id);
+  if (!d) return;
+  if (!confirm(`「${d.name}」を削除しますか？\nこの辞書の単語・規則・設定はすべて失われます。`)) return;
+  ['words','rules','pos','labels'].forEach(k => localStorage.removeItem(storageKey(d.id, k)));
+  dicts = dicts.filter(x => x.id !== id);
+  if (activeDictId === id) activeDictId = dicts[0].id;
+  saveDicts();
+  loadAsync().then(() => {
+    renderDictList();
+    sideFilter = '__all__';
+    renderSearchScopeBar();
+    renderWords(); updateStats();
+  });
+}
+
+// 旧名互換
+function deleteCurrentDict() { deleteDict(activeDictId); }
+
+function getPOS(name) { return posList.find(p => p.name === name) || { color: '#5a5670', name: name }; }
+function getPOSById(id) { return posList.find(p => p.id === id); }
+
+// ── SIDEBAR（品詞フィルター）── 将来の検索機能に統合予定、今は維持 ──
+function renderSidebar() {
+  // サイドバーの品詞ナビは今後検索機能に移行予定のため何もしない
+}
+
+function updateStats() {
+  renderDictList();
+  const el = document.getElementById('word-count-display');
+  if (el) el.textContent = `現在の単語数 : ${words.length}`;
+}
+
+// ── SEARCH SCOPE ──────────────────────────────────────────
+// 固定スコープ: 'word'=綴り, 'roman'=訳語（発音）, 'tag'=タグ, 'desc'=説明, 'all'=全文
+// 動的スコープ: fieldLabels の key （情報フィールド）
+let searchScopes = new Set(['word']); // デフォルトは単語
+
+const FIXED_SCOPES = [
+  { key: 'word',  label: '単語' },
+  { key: 'roman', label: '訳語' },
+  { key: 'tag',   label: 'タグ' },
+  { key: 'pos',   label: '品詞' },
+  { key: 'desc',  label: '説明' },
+];
+
+function renderSearchScopeBar() {
+  const bar = document.getElementById('search-scope-bar');
+  if (!bar) return;
+  // 固定 + 情報フィールド + 全文
+  const allScopes = [
+    ...FIXED_SCOPES,
+    ...fieldLabels.filter(f => f.label).map(f => ({ key: 'meta:' + f.key, label: f.label })),
+    { key: 'all', label: '全文' },
+  ];
+  bar.innerHTML = allScopes.map(s =>
+    `<button class="scope-btn${searchScopes.has(s.key) ? ' active' : ''}" onclick="toggleScope('${s.key}')">${esc(s.label)}</button>`
+  ).join('');
+}
+
+function toggleScope(key) {
+  if (key === 'all') {
+    // 全文を選んだら他を解除
+    searchScopes = new Set(['all']);
+  } else {
+    searchScopes.delete('all');
+    if (searchScopes.has(key)) {
+      searchScopes.delete(key);
+      if (searchScopes.size === 0) searchScopes.add('all'); // 全解除→全文に戻す
+    } else {
+      searchScopes.add(key);
+    }
+  }
+  renderSearchScopeBar();
+  renderWords();
+}
+
+// ── WORDS RENDER ─────────────────────────────────────────
+function renderWords() {
+  const q = document.getElementById('search-input').value.toLowerCase();
+  const sort = document.getElementById('sort-select').value;
+
+  let list = [...words];
+  if (sideFilter !== '__all__') {
+    list = list.filter(w => (w.senses||[]).some(s => (s.rows||[]).some(r => r.pos === sideFilter)));
+  }
+  if (q) {
+    list = list.filter(w => {
+      // スコープに応じて検索対象を構築
+      const useAll = searchScopes.has('all');
+      let targets = [];
+      if (useAll || searchScopes.has('word'))  targets.push(w.word || '');
+      if (useAll || searchScopes.has('roman')) targets.push(w.roman || '');
+      if (useAll || searchScopes.has('tag'))   targets.push(...(w.cat||'').split(',').map(t=>t.trim()));
+      if (useAll || searchScopes.has('pos')) {
+        (w.senses||[]).flatMap(s => s.rows||[]).forEach(r => { if (r.pos) targets.push(r.pos); });
+      }
+      if (useAll || searchScopes.has('desc')) {
+        (w.senses||[]).forEach(s => { if (s.desc) targets.push(s.desc); });
+        if (w.note) targets.push(w.note);
+      }
+      // 意味（訳語ではなく meaning）は全文か単語スコープに含める
+      if (useAll || searchScopes.has('word')) {
+        (w.senses||[]).flatMap(s => s.rows||[]).forEach(r => { if (r.meaning) targets.push(r.meaning); });
+      }
+      // メタフィールド
+      fieldLabels.forEach(f => {
+        if (useAll || searchScopes.has('meta:' + f.key)) {
+          const val = (w.meta||{})[f.key];
+          if (val) targets.push(val);
+        }
+      });
+      return targets.join(' ').toLowerCase().includes(q);
+    });
+  }
+  if (sort === 'az') list.sort((a,b) => a.word.localeCompare(b.word));
+  else if (sort === 'za') list.sort((a,b) => b.word.localeCompare(a.word));
+  else if (sort === 'new') list.sort((a,b) => b.ts - a.ts);
+  else list.sort((a,b) => a.ts - b.ts);
+
+  const grid = document.getElementById('word-grid');
+  if (!list.length) {
+    grid.innerHTML = `<div class="empty-state"><div class="big">✦</div><p>${words.length ? '該当する単語がありません' : 'まだ単語がありません。<br>「＋ 単語を追加」から始めましょう。'}</p></div>`;
+    return;
+  }
+  grid.innerHTML = list.map(w => renderWordCard(w)).join('');
+}
+
+function renderWordCard(w) {
+  // Collect all POS from senses for left column badges
+  const allPosNames = [...new Set((w.senses||[]).flatMap(s => (s.rows||[]).map(r => r.pos).filter(Boolean)))];
+  // Pick primary color from first POS
+  const primaryPos = getPOS(allPosNames[0] || '');
+  const primaryRgb = hexToRgb(primaryPos.color);
+
+  // Senses HTML
+  const sensesHtml = (w.senses||[]).map((s, si) => {
+    const letter = String.fromCharCode(65 + si); // A, B, C...
+    const rowsHtml = (s.rows||[]).map(r => {
+      const pos = getPOS(r.pos);
+      const rgb = hexToRgb(pos.color);
+      return `<div class="sense-row">
+        <span class="pos-badge">${esc(r.pos).replace(/ /g,'&nbsp;')}</span>
+        <span class="sense-meaning">${escDim(r.meaning)}</span>
+      </div>`;
+    }).join('');
+    const descHtml = s.desc ? `<div style="font-size:12px;color:var(--text2);margin-top:5px;line-height:1.6;padding-left:2px">${escDim(s.desc).replace(/\n/g,'<br>')}</div>` : '';
+    return `<div class="sense-block">
+      ${(w.senses||[]).length > 1 ? `<span class="sense-letter">${letter}</span>` : ''}
+      <div class="sense-inner">${rowsHtml}${descHtml}</div>
+    </div>`;
+  }).join('');
+
+  // Meta fields HTML
+  const metaHtml = fieldLabels.filter(f => f.label && (w.meta||{})[f.key]).map(f =>
+    `<div class="meta-item">
+      <span class="meta-lbl">${esc(f.label)}</span>
+      <span class="meta-val">${esc((w.meta||{})[f.key])}</span>
+    </div>`
+  ).join('');
+
+  // Examples HTML
+  const examplesHtml = (w.examples||[]).filter(e => e.text).map(e =>
+    `<div class="example-block">
+      <div class="example-text">${esc(e.text)}</div>
+      ${showRomanSentence && e.text ? `<div style="font-family:'Noto Serif JP',serif;font-size:12px;color:var(--text3);margin-top:1px">${esc(e.text)}</div>` : ''}
+      ${e.trans ? `<div class="example-trans">${esc(e.trans)}</div>` : ''}
+    </div>`
+  ).join('');
+
+  return `<div class="word-card" onmousedown="wordMouseDown('${w.id}',event)" onmouseup="wordMouseUp('${w.id}',event)" oncontextmenu="return false">
+    <div class="card-actions-hover" onmousedown="event.stopPropagation()" onmouseup="event.stopPropagation()">
+      <button class="card-action-btn" onclick="duplicateWord('${w.id}')">複製</button>
+      <button class="card-action-btn del" onclick="deleteWord('${w.id}')">削除</button>
+    </div>
+    <div class="card-left">
+      <div class="word-main-row">
+        <span class="word-main">${esc(w.word)}</span>
+        ${showRomanWord && w.word ? `<span class="word-translit">${esc(w.word)}</span>` : ''}
+      </div>
+      ${w.roman ? `<div class="word-roman">${esc(w.roman)}</div>` : ''}
+      ${w.cat ? `<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px">${w.cat.split(',').map(t => t.trim()).filter(Boolean).map(t => `<span class="word-cat">${esc(t)}</span>`).join('')}</div>` : ''}
+    </div>
+    <div class="card-right">
+      <div class="senses">${sensesHtml}</div>
+      ${metaHtml ? `<div class="card-meta">${metaHtml}</div>` : ''}
+      ${w.note ? `<div style="font-size:12px;color:var(--text2);line-height:1.6;margin-top:4px">${esc(w.note).replace(/\n/g,'<br>')}</div>` : ''}
+      ${examplesHtml ? `<div class="card-examples">${examplesHtml}</div>` : ''}
+      ${(w.idioms||[]).length ? `<div class="card-idioms">${(w.idioms).map(e =>
+        `<div class="idiom-item">
+          <span class="idiom-phrase">${esc(e.phrase)}</span><span class="idiom-meaning">${esc(e.meaning)}</span>
+          ${showRomanSentence && e.phrase ? `<div style="font-family:'Noto Serif JP',serif;font-size:11px;color:var(--text3);margin-top:1px">${esc(e.phrase)}</div>` : ''}
+          ${e.desc ? `<div class="idiom-desc">${esc(e.desc)}</div>` : ''}
+        </div>`).join('')}</div>` : ''}
+    </div>
+  </div>`;
+}
+
+// ── WORD MODAL ────────────────────────────────────────────
+let modalSenses = []; // [{ id, rows: [{id, pos, meaning}] }]
+let modalExamples = []; // [{id, text, trans}]
+let modalIdioms = []; // [{id, phrase, meaning, desc}]
+
+function openAddWord() {
+  editingId = null;
+  romanManuallyEdited = false;
+  document.getElementById('roman-auto-hint').classList.remove('visible');
+  document.getElementById('f-word').value = '';
+  document.getElementById('f-roman').value = '';
+  document.getElementById('f-cat').value = '';
+  document.getElementById('f-note').value = '';
+  modalSenses = [{ id: uid(), rows: [{ id: uid(), pos: '', meaning: '' }], desc: '' }];
+  modalExamples = [];
+  modalIdioms = [];
+  document.getElementById('modal-word-title').textContent = '単語を追加';
+  renderSensesEditor();
+  renderMetaFieldsEditor({});
+  setTimeout(() => { fieldLabels.forEach(f => { const el = document.getElementById('meta-'+f.key); if (el) el.value = ''; }); }, 50);
+  renderExamplesEditor();
+  renderIdiomsEditor();
+  showModal('word-modal');
+}
+
+function openEditWord(id) {
+  editingId = id;
+  const w = words.find(x => x.id === id); if (!w) return;
+  document.getElementById('modal-word-title').textContent = '単語を編集';
+  document.getElementById('f-word').value = w.word;
+  document.getElementById('f-roman').value = w.roman || '';
+  document.getElementById('f-cat').value = w.cat || '';
+  document.getElementById('f-note').value = w.note || '';
+  romanManuallyEdited = false;
+  document.getElementById('roman-auto-hint').classList.remove('visible');
+  modalSenses = JSON.parse(JSON.stringify(w.senses || [{ id: uid(), rows: [{ id: uid(), pos: '', meaning: '' }] }]));
+  modalExamples = JSON.parse(JSON.stringify(w.examples || []));
+  modalIdioms = JSON.parse(JSON.stringify(w.idioms || []));
+  renderSensesEditor();
+  renderMetaFieldsEditor(w.meta || {});
+  setTimeout(() => { fieldLabels.forEach(f => { const el = document.getElementById('meta-'+f.key); if (el) el.value = (w.meta||{})[f.key] || ''; }); }, 50);
+  renderExamplesEditor();
+  renderIdiomsEditor();
+  showModal('word-modal');
+}
+
+function renderSensesEditor() {
+  const el = document.getElementById('senses-editor');
+  el.innerHTML = modalSenses.map((s, si) => {
+    const letter = String.fromCharCode(65 + si);
+    const rowsHtml = s.rows.map((r, ri) => `
+      <div class="sense-pos-row" data-sense="${s.id}" data-row="${r.id}">
+        <select onchange="updateSenseRow('${s.id}','${r.id}','pos',this.value)">
+          <option value=""></option>
+          ${posList.map(p => `<option value="${esc(p.name)}"${p.name===r.pos?' selected':''}>${esc(p.name).replace(/ /g,'&nbsp;')}</option>`).join('')}
+        </select>
+        <input type="text" placeholder="訳語" value="${esc(r.meaning)}" oninput="updateSenseRow('${s.id}','${r.id}','meaning',this.value)">
+        ${s.rows.length > 1 ? `<button class="btn-icon" onclick="removeSenseRow('${s.id}','${r.id}')">✕</button>` : ''}
+        <div style="display:flex;flex-direction:column;gap:1px">
+          ${ri > 0 ? `<button class="btn-icon" style="padding:1px 6px;font-size:10px" onclick="moveSenseRow('${s.id}','${r.id}',-1)">↑</button>` : '<span style="width:24px"></span>'}
+          ${ri < s.rows.length-1 ? `<button class="btn-icon" style="padding:1px 6px;font-size:10px" onclick="moveSenseRow('${s.id}','${r.id}',1)">↓</button>` : '<span style="width:24px"></span>'}
+        </div>
+      </div>`).join('');
+    return `<div class="sense-editor-block">
+      <div class="sense-editor-header">
+        ${modalSenses.length > 1 ? `<span class="sense-letter-badge">${letter}</span>` : ''}
+        <span style="font-size:12px;color:var(--text3);flex:1">意味</span>
+        ${modalSenses.length > 1 ? `<button class="btn-icon" onclick="removeSenseBlock('${s.id}')">✕ 削除</button>` : ''}
+        ${si > 0 ? `<button class="btn-icon" style="padding:1px 6px;font-size:10px" onclick="moveSenseBlock('${s.id}',-1)">↑</button>` : ''}
+        ${si < modalSenses.length-1 ? `<button class="btn-icon" style="padding:1px 6px;font-size:10px" onclick="moveSenseBlock('${s.id}',1)">↓</button>` : ''}
+      </div>
+      <div class="sense-editor-rows">${rowsHtml}</div>
+      <button class="btn-add-small" style="margin-top:6px" onclick="addSensePosRow('${s.id}')">＋ 品詞を追加</button>
+      <div class="sense-desc-wrap">
+        <textarea class="sense-desc-input" placeholder="説明" oninput="updateSenseDesc('${s.id}',this.value)">${esc(s.desc||'')}</textarea>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function updateSenseRow(sId, rId, field, val) {
+  const s = modalSenses.find(x => x.id === sId);
+  if (!s) return;
+  const r = s.rows.find(x => x.id === rId);
+  if (r) r[field] = val;
+}
+
+function updateSenseDesc(sId, val) {
+  const s = modalSenses.find(x => x.id === sId);
+  if (s) s.desc = val;
+}
+
+function addSenseBlock() {
+  modalSenses.push({ id: uid(), rows: [{ id: uid(), pos: '', meaning: '' }], desc: '' });
+  renderSensesEditor();
+}
+
+function moveSenseBlock(sId, dir) {
+  const i = modalSenses.findIndex(x => x.id === sId);
+  if (i < 0) return;
+  const j = i + dir;
+  if (j < 0 || j >= modalSenses.length) return;
+  [modalSenses[i], modalSenses[j]] = [modalSenses[j], modalSenses[i]];
+  renderSensesEditor();
+}
+
+function moveSenseRow(sId, rId, dir) {
+  const s = modalSenses.find(x => x.id === sId); if (!s) return;
+  const i = s.rows.findIndex(x => x.id === rId);
+  if (i < 0) return;
+  const j = i + dir;
+  if (j < 0 || j >= s.rows.length) return;
+  [s.rows[i], s.rows[j]] = [s.rows[j], s.rows[i]];
+  renderSensesEditor();
+}
+
+function removeSenseBlock(sId) {
+  modalSenses = modalSenses.filter(x => x.id !== sId);
+  renderSensesEditor();
+}
+
+function addSensePosRow(sId) {
+  const s = modalSenses.find(x => x.id === sId);
+  if (s) s.rows.push({ id: uid(), pos: '', meaning: '' });
+  renderSensesEditor();
+}
+
+function removeSenseRow(sId, rId) {
+  const s = modalSenses.find(x => x.id === sId);
+  if (s) s.rows = s.rows.filter(x => x.id !== rId);
+  renderSensesEditor();
+}
+
+function renderMetaFieldsEditor(meta) {
+  const el = document.getElementById('meta-fields-editor');
+  el.innerHTML = fieldLabels.filter(f => f.label).map(f => `
+    <div class="field">
+      <label>${esc(f.label)}</label>
+      <input type="text" id="meta-${f.key}" placeholder="" value="${esc(meta[f.key]||'')}" autocomplete="off">
+    </div>`).join('');
+}
+
+function renderIdiomsEditor() {
+  const el = document.getElementById('idioms-editor');
+  if (!el) return;
+  el.innerHTML = modalIdioms.map((e, i) => `
+    <div class="idiom-editor-block">
+      <div style="display:flex;gap:6px;align-items:center">
+        <input type="text" placeholder="熟語" value="${esc(e.phrase)}" oninput="updateIdiom('${e.id}','phrase',this.value)" style="flex:1">
+        <input type="text" placeholder="意味" value="${esc(e.meaning)}" oninput="updateIdiom('${e.id}','meaning',this.value)" style="flex:1">
+        <button class="btn-icon" onclick="removeIdiom('${e.id}')">✕</button>
+      </div>
+      <textarea placeholder="説明" oninput="updateIdiom('${e.id}','desc',this.value)">${esc(e.desc||'')}</textarea>
+    </div>`).join('');
+}
+
+function addIdiomRow() {
+  modalIdioms.push({ id: uid(), phrase: '', meaning: '', desc: '' });
+  renderIdiomsEditor();
+}
+
+function updateIdiom(id, field, val) {
+  const e = modalIdioms.find(x => x.id === id);
+  if (e) e[field] = val;
+}
+
+function removeIdiom(id) {
+  modalIdioms = modalIdioms.filter(x => x.id !== id);
+  renderIdiomsEditor();
+}
+
+function renderExamplesEditor() {
+  const el = document.getElementById('examples-editor');
+  el.innerHTML = modalExamples.map((e, i) => `
+    <div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:10px;margin-bottom:4px">
+      <div class="example-editor-row" style="margin-bottom:6px">
+        <input type="text" placeholder="例文" value="${esc(e.text)}" oninput="updateExample('${e.id}','text',this.value)">
+        <button class="btn-icon" onclick="removeExample('${e.id}')">✕</button>
+      </div>
+      <div class="example-editor-row">
+        <input type="text" class="example-trans-input" placeholder="訳" value="${esc(e.trans||'')}" oninput="updateExample('${e.id}','trans',this.value)">
+      </div>
+    </div>`).join('');
+}
+
+function addExampleRow() {
+  modalExamples.push({ id: uid(), text: '', trans: '' });
+  renderExamplesEditor();
+}
+
+function updateExample(id, field, val) {
+  const e = modalExamples.find(x => x.id === id);
+  if (e) e[field] = val;
+}
+
+function removeExample(id) {
+  modalExamples = modalExamples.filter(x => x.id !== id);
+  renderExamplesEditor();
+}
+
+function saveWord() {
+  const word = document.getElementById('f-word').value.trim();
+  const meta = {};
+  fieldLabels.forEach(f => {
+    const el = document.getElementById('meta-' + f.key);
+    if (el) meta[f.key] = el.value.trim();
+  });
+
+  const rawRoman = document.getElementById('f-roman').value.trim();
+  const roman = rawRoman && !rawRoman.startsWith('/') ? `/${rawRoman}/` : rawRoman;
+
+  const obj = {
+    id: editingId || uid(),
+    word,
+    roman,
+    cat: document.getElementById('f-cat').value.trim(),
+    note: document.getElementById('f-note').value.trim(),
+    senses: JSON.parse(JSON.stringify(modalSenses)),
+    meta,
+    examples: JSON.parse(JSON.stringify(modalExamples)).filter(e => e.text.trim()),
+    idioms: JSON.parse(JSON.stringify(modalIdioms)).filter(e => e.phrase.trim()),
+    ts: editingId ? (words.find(x => x.id === editingId)||{}).ts || Date.now() : Date.now()
+  };
+
+  if (editingId) words = words.map(x => x.id === editingId ? obj : x);
+  else words.push(obj);
+  persist(); closeModal('word-modal'); renderWords(); updateStats();
+}
+
+function duplicateWord(id) {
+  const w = words.find(x => x.id === id); if (!w) return;
+  const copy = JSON.parse(JSON.stringify(w));
+  copy.id = uid();
+  copy.ts = Date.now();
+  copy.senses = (copy.senses||[]).map(s => ({
+    ...s, id: uid(), rows: (s.rows||[]).map(r => ({...r, id: uid()}))
+  }));
+  copy.examples = (copy.examples||[]).map(e => ({...e, id: uid()}));
+  copy.idioms = (copy.idioms||[]).map(e => ({...e, id: uid()}));
+  // 保存せずモーダルを新規追加モードで開く
+  editingId = null; // 新規として扱う
+  romanManuallyEdited = false;
+  document.getElementById('roman-auto-hint').classList.remove('visible');
+  document.getElementById('modal-word-title').textContent = '単語を複製';
+  document.getElementById('f-word').value = copy.word;
+  document.getElementById('f-roman').value = copy.roman || '';
+  document.getElementById('f-cat').value = copy.cat || '';
+  document.getElementById('f-note').value = copy.note || '';
+  modalSenses = copy.senses;
+  modalExamples = copy.examples;
+  modalIdioms = copy.idioms;
+  renderSensesEditor();
+  renderMetaFieldsEditor(copy.meta || {});
+  setTimeout(() => { fieldLabels.forEach(f => { const el = document.getElementById('meta-'+f.key); if (el) el.value = (copy.meta||{})[f.key] || ''; }); }, 50);
+  renderExamplesEditor();
+  renderIdiomsEditor();
+  showModal('word-modal');
+}
+
+function deleteWord(id) {
+  if (!confirm('この単語を削除しますか？')) return;
+  words = words.filter(x => x.id !== id);
+  persist(); renderWords(); updateStats();
+}
+
+// ── POS MANAGER ───────────────────────────────────────────
+function renderPOSManager() {
+  const list = document.getElementById('pos-manager-list');
+  list.innerHTML = posList.map((p, i) => {
+    const cnt = words.filter(w => (w.senses||[]).some(s => (s.rows||[]).some(r => r.pos === p.name))).length;
+    return `<div class="pos-manager-row">
+      <div class="pos-manager-name">${esc(p.name).replace(/ /g,'&nbsp;')}</div>
+      <div class="pos-manager-count">${cnt}語</div>
+      <button class="btn-sm" onclick="openEditPOS('${p.id}')">編集</button>
+      <button class="btn-sm del" onclick="deletePOS('${p.id}')">削除</button>
+      <div style="display:flex;flex-direction:column;gap:1px">
+        ${i > 0 ? `<button class="btn-icon" style="padding:1px 6px;font-size:10px" onclick="movePOS('${p.id}',-1)">↑</button>` : '<span style="width:24px"></span>'}
+        ${i < posList.length-1 ? `<button class="btn-icon" style="padding:1px 6px;font-size:10px" onclick="movePOS('${p.id}',1)">↓</button>` : '<span style="width:24px"></span>'}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function movePOS(id, dir) {
+  const i = posList.findIndex(x => x.id === id);
+  if (i < 0) return;
+  const j = i + dir;
+  if (j < 0 || j >= posList.length) return;
+  [posList[i], posList[j]] = [posList[j], posList[i]];
+  persist(); renderPOSManager();
+}
+
+function addNewPOS() {
+  const name = document.getElementById('new-pos-name').value;
+  if (name === '') { alert('品詞名を入力してください'); return; }
+  if (posList.some(p => p.name === name)) { alert('同じ名前の品詞が既に存在します'); return; }
+  posList.push({ id: uid(), name });
+  document.getElementById('new-pos-name').value = '';
+  persist(); renderPOSManager(); renderSidebar();
+}
+
+function openEditPOS(id) {
+  editingPOSId = id;
+  const p = getPOSById(id); if (!p) return;
+  document.getElementById('ep-name').value = p.name;
+  showModal('pos-modal');
+}
+
+function saveEditPOS() {
+  const name = document.getElementById('ep-name').value;
+  if (name === '') { alert('品詞名を入力してください'); return; }
+  const p = getPOSById(editingPOSId); if (!p) return;
+  const oldName = p.name;
+  if (oldName !== name) {
+    words = words.map(w => ({
+      ...w,
+      senses: (w.senses||[]).map(s => ({
+        ...s,
+        rows: (s.rows||[]).map(r => r.pos === oldName ? {...r, pos: name} : r)
+      }))
+    }));
+    if (sideFilter === oldName) sideFilter = name;
+  }
+  p.name = name;
+  persist(); closeModal('pos-modal');
+  renderPOSManager(); renderSidebar(); renderWords(); updateStats();
+}
+
+function deletePOS(id) {
+  const p = getPOSById(id); if (!p) return;
+  const cnt = words.filter(w => (w.senses||[]).some(s => (s.rows||[]).some(r => r.pos === p.name))).length;
+  const msg = cnt > 0
+    ? `「${p.name}」を削除します。この品詞を持つ${cnt}語は「その他」に変更されます。よろしいですか？`
+    : `「${p.name}」を削除しますか？`;
+  if (!confirm(msg)) return;
+  if (cnt > 0) {
+    words = words.map(w => ({
+      ...w,
+      senses: (w.senses||[]).map(s => ({
+        ...s,
+        rows: (s.rows||[]).map(r => r.pos === p.name ? {...r, pos: 'その他'} : r)
+      }))
+    }));
+  }
+  posList = posList.filter(x => x.id !== id);
+  if (sideFilter === p.name) sideFilter = '__all__';
+  persist(); renderPOSManager(); renderSidebar(); renderWords(); updateStats();
+}
+
+// ── FIELD LABELS ──────────────────────────────────────────
+function renderFieldLabels() {
+  const el = document.getElementById('field-labels-list');
+  el.innerHTML = fieldLabels.map((f, i) => `
+    <div class="field-label-row">
+      <input class="field-label-input" type="text" data-fi="${i}" data-field="label" value="${esc(f.label)}" placeholder="">
+      <button class="field-label-del" onclick="removeFieldLabel(${i})" title="削除">✕</button>
+    </div>`).join('');
+}
+
+function addFieldLabel() {
+  fieldLabels.push({ key: 'field_' + uid(), label: '', placeholder: '' });
+  renderFieldLabels();
+}
+
+function removeFieldLabel(i) {
+  if (!confirm('このフィールドを削除しますか？\n登録済みデータのこのフィールドの値は失われます。')) return;
+  const key = fieldLabels[i].key;
+  fieldLabels.splice(i, 1);
+  // 既存単語からも削除
+  words = words.map(w => { const m = {...(w.meta||{})}; delete m[key]; return {...w, meta: m}; });
+  persist(); renderFieldLabels(); renderWords();
+}
+
+function saveFieldLabels() {
+  document.querySelectorAll('#field-labels-list input[data-fi]').forEach(el => {
+    const i = parseInt(el.dataset.fi);
+    if (fieldLabels[i]) fieldLabels[i].label = el.value.trim();
+  });
+  persist();
+  renderWords();
+  renderSearchScopeBar();
+  showToast('保存しました');
+}
+
+// ── RULES ─────────────────────────────────────────────────
+let ruleCollapsed = {};
+
+function toggleRuleCollapse(id) {
+  ruleCollapsed[id] = !ruleCollapsed[id];
+  renderRules();
+}
+
+function renderRules() {
+  const el = document.getElementById('rules-list');
+  if (!rules.length) { el.innerHTML = '<div class="empty-state"><div class="big">✦</div><p>規則がまだありません。</p></div>'; return; }
+  el.innerHTML = rules.map(r => {
+    const lines = (r.body.match(/\n/g)||[]).length + 1;
+    const isLong = lines > 3 || r.body.length > 120;
+    const collapsed = isLong && ruleCollapsed[r.id] !== false;
+    const bodyHtml = esc(r.body);
+    const exHtml = r.example ? `<div class="rule-example">${esc(r.example)}</div>` : '';
+    return `<div class="rule-card" style="position:relative;cursor:pointer" onmousedown="ruleMouseDown(event)" onmouseup="ruleMouseUp('${r.id}',event)">
+      <div class="card-actions-hover" style="opacity:0" onmouseenter="this.style.opacity=1" onmouseleave="this.style.opacity=0" onmousedown="event.stopPropagation()" onmouseup="event.stopPropagation()">
+        <button class="card-action-btn" onclick="openEditRule('${r.id}')">編集</button>
+        <button class="card-action-btn del" onclick="deleteRule('${r.id}')">削除</button>
+      </div>
+      <div class="rule-title" style="margin-bottom:${collapsed && isLong ? '0' : '6px'};padding-right:100px">${esc(r.title)}</div>
+      <div style="${collapsed ? 'max-height:3.6em;overflow:hidden;' : ''}">
+        <div class="rule-body">${bodyHtml}</div>
+        ${exHtml}
+      </div>
+      ${isLong ? `<div style="font-size:11px;color:var(--text3);font-family:'JetBrains Mono',monospace;padding-top:4px">${collapsed ? '▼ 展開' : '▲ 折りたたむ'}</div>` : ''}
+    </div>`;
+  }).join('');
+}
+
+function openAddRule() {
+  editingRuleId = null;
+  ['r-title','r-body','r-ex'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('modal-rule-title').textContent = '規則を追加';
+  showModal('rule-modal');
+}
+function openEditRule(id) {
+  editingRuleId = id;
+  const r = rules.find(x => x.id === id); if (!r) return;
+  document.getElementById('modal-rule-title').textContent = '規則を編集';
+  document.getElementById('r-title').value = r.title;
+  document.getElementById('r-body').value = r.body;
+  document.getElementById('r-ex').value = r.example || '';
+  showModal('rule-modal');
+}
+function saveRule() {
+  const obj = { id: editingRuleId || uid(), title: document.getElementById('r-title').value.trim(), body: document.getElementById('r-body').value.trim(), example: document.getElementById('r-ex').value.trim() };
+  if (editingRuleId) rules = rules.map(x => x.id === editingRuleId ? obj : x);
+  else rules.push(obj);
+  persist(); closeModal('rule-modal'); renderRules(); updateStats();
+}
+function deleteRule(id) {
+  if (!confirm('この規則を削除しますか？')) return;
+  rules = rules.filter(x => x.id !== id);
+  persist(); renderRules(); updateStats();
+}
+
+// ── EXPORT / IMPORT ───────────────────────────────────────
+function renderCharFreq() {
+  const el = document.getElementById('char-freq-container');
+  if (!el) return;
+  if (!words.length) { el.innerHTML = '<div style="color:var(--text3);font-size:13px;padding:2rem 0">単語がありません。</div>'; return; }
+
+  // 見出し語の全文字をカウント
+  const freq = {};
+  for (const w of words) {
+    for (const ch of (w.word || '')) {
+      freq[ch] = (freq[ch] || 0) + 1;
+    }
+  }
+  const sorted = Object.entries(freq).sort((a, b) => b[1] - a[1]);
+  const total = sorted.reduce((s, [, c]) => s + c, 0);
+  const max = sorted[0]?.[1] || 1;
+
+  const rows = sorted.map(([ch, cnt]) => {
+    const pct = (cnt / total * 100).toFixed(1);
+    const barW = Math.round(cnt / max * 100);
+    return `<div style="display:flex;align-items:center;gap:10px;padding:4px 0;border-bottom:1px solid var(--border)">
+      <span style="font-family:'Noto Serif JP',serif;font-size:20px;min-width:32px;text-align:center;color:var(--text)">${esc(ch)}</span>
+      <div style="flex:1;background:var(--bg3);border-radius:4px;height:8px;overflow:hidden">
+        <div style="width:${barW}%;height:100%;background:var(--accent);border-radius:4px"></div>
+      </div>
+      <span style="font-size:12px;color:var(--text2);min-width:36px;text-align:right">${cnt}</span>
+      <span style="font-size:12px;color:var(--text3);min-width:42px;text-align:right">${pct}%</span>
+    </div>`;
+  }).join('');
+
+  el.innerHTML = `
+    <div style="margin-bottom:12px;font-size:13px;color:var(--text2)">見出し語 ${words.length} 語 ／ 総文字数 ${total} ／ 異なり字数 ${sorted.length}</div>
+    <div style="max-height:60vh;overflow-y:auto;padding-right:4px">${rows}</div>`;
+}
+
+let _infoView = 'list';
+
+function renderCharPie() {
+  const el = document.getElementById('char-pie-container');
+  if (!el) return;
+  if (!words.length) { el.innerHTML = '<div style="color:var(--text3);font-size:13px;padding:2rem 0">単語がありません。</div>'; return; }
+
+  const freq = {};
+  for (const w of words) {
+    for (const ch of (w.word || '')) {
+      freq[ch] = (freq[ch] || 0) + 1;
+    }
+  }
+  const sorted = Object.entries(freq).sort((a, b) => b[1] - a[1]);
+  const total = sorted.reduce((s, [, c]) => s + c, 0);
+
+  const slices = sorted;
+
+  // カラーパレット（パステル）
+  const palette = [
+    '#f4b8c1','#f9d4a0','#fdf0a0','#b8e6b8','#a8d8ea',
+    '#c3b1e1','#f7c6a3','#b8dfd8','#f9b8d4','#c5e0b4',
+    '#aed6f1','#f5cba7','#d2b4de','#a9dfbf','#fad7a0','#ccc'
+  ];
+
+  const cx = 220, cy = 220, r = 200, ri = 100;
+  let angle = -Math.PI / 2;
+  let paths = '', legends = '';
+
+  slices.forEach(([ch, cnt], i) => {
+    const frac = cnt / total;
+    const a1 = angle;
+    const a2 = angle + frac * Math.PI * 2;
+    const x1 = cx + r * Math.cos(a1), y1 = cy + r * Math.sin(a1);
+    const x2 = cx + r * Math.cos(a2), y2 = cy + r * Math.sin(a2);
+    const ix1 = cx + ri * Math.cos(a1), iy1 = cy + ri * Math.sin(a1);
+    const ix2 = cx + ri * Math.cos(a2), iy2 = cy + ri * Math.sin(a2);
+    const large = frac > 0.5 ? 1 : 0;
+    const color = palette[i % palette.length];
+    const mid = (a1 + a2) / 2;
+    const pct = (frac * 100).toFixed(1);
+
+    paths += `<path d="M${ix1},${iy1} L${x1},${y1} A${r},${r} 0 ${large},1 ${x2},${y2} L${ix2},${iy2} A${ri},${ri} 0 ${large},0 ${ix1},${iy1} Z"
+      fill="${color}" stroke="var(--bg)" stroke-width="1.5" opacity="0.92"
+      onmouseenter="showPieTip(event,'${esc(ch)}',${cnt},'${pct}')"
+      onmouseleave="hidePieTip()"
+      style="cursor:default;transition:opacity 0.1s" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.92'"></path>`;
+
+    // 5%以上のスライスにラベル
+    if (frac >= 0.03) {
+      const lx = cx + (r * 0.72) * Math.cos(mid);
+      const ly = cy + (r * 0.72) * Math.sin(mid);
+      paths += `<text x="${lx}" y="${ly}" text-anchor="middle" dominant-baseline="middle"
+        font-family="'Noto Serif JP',serif" font-size="13" fill="#333" opacity="0.9">${esc(ch)}</text>`;
+    }
+
+    legends += `<div style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2)">
+      <span style="width:10px;height:10px;border-radius:2px;background:${color};flex-shrink:0"></span>
+      <span style="font-family:'Noto Serif JP',serif;font-size:14px;color:var(--text);min-width:20px">${esc(ch)}</span>
+      <span>${cnt} (${pct}%)</span>
+    </div>`;
+
+    angle = a2;
+  });
+
+  el.innerHTML = `
+    <div style="position:relative;display:flex;gap:24px;align-items:flex-start;flex-wrap:wrap;margin-bottom:16px">
+      <svg width="440" height="440" viewBox="0 0 440 440" style="flex-shrink:0">${paths}</svg>
+      <div style="display:flex;flex-direction:column;gap:5px;height:440px;overflow-y:auto;padding-right:4px;min-width:160px;white-space:nowrap">${legends}</div>
+    </div>
+    <div id="pie-tooltip" style="position:fixed;display:none;background:var(--bg3);border:1px solid var(--border2);border-radius:6px;padding:5px 10px;font-size:13px;color:var(--text);pointer-events:none;z-index:999;white-space:nowrap"></div>`;
+}
+
+function showPieTip(e, ch, cnt, pct) {
+  const tip = document.getElementById('pie-tooltip');
+  if (!tip) return;
+  tip.innerHTML = `<span style="font-family:'Noto Serif JP',serif;font-size:16px">${ch}</span>　${cnt}回　${pct}%`;
+  tip.style.display = 'block';
+  tip.style.left = (e.clientX + 12) + 'px';
+  tip.style.top = (e.clientY - 10) + 'px';
+  e.currentTarget.addEventListener('mousemove', _movePieTip);
+}
+function _movePieTip(e) {
+  const tip = document.getElementById('pie-tooltip');
+  if (tip) { tip.style.left = (e.clientX + 12) + 'px'; tip.style.top = (e.clientY - 10) + 'px'; }
+}
+function hidePieTip() {
+  const tip = document.getElementById('pie-tooltip');
+  if (tip) tip.style.display = 'none';
+}
+
+function exportJSON() {
+  const data = { dictName: activeDict().name, words, rules, posList, fieldLabels, exportedAt: new Date().toISOString() };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = (activeDict().name || 'dictionary') + '.json';
+  a.click();
+}
+function importJSON(e) {
+  const file = e.target.files[0]; if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try {
+      const d = JSON.parse(ev.target.result);
+      if (!confirm('現在の辞書「' + activeDict().name + '」のデータを上書きしますか？')) return;
+      words = d.words || [];
+      rules = d.rules || [];
+      posList = d.posList && d.posList.length ? d.posList : DEFAULT_POS.map(p => ({...p}));
+      fieldLabels = d.fieldLabels && d.fieldLabels.length ? d.fieldLabels : DEFAULT_FIELD_LABELS.map(f => ({...f}));
+      persist(); renderWords(); renderRules(); renderPOSManager(); renderFieldLabels(); renderDictList(); updateStats();
+      showToast('インポート完了');
+    } catch { alert('JSONの読み込みに失敗しました。'); }
+  };
+  reader.readAsText(file);
+}
+
+// ── MODALS ────────────────────────────────────────────────
+function showModal(id) { document.getElementById(id).classList.remove('hidden'); }
+function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
+let _overlayMouseDownTarget = null;
+document.querySelectorAll('.overlay').forEach(el => {
+  el.addEventListener('mousedown', e => { _overlayMouseDownTarget = e.target; });
+  el.addEventListener('click', e => {
+    if (e.target === el && _overlayMouseDownTarget === el) el.classList.add('hidden');
+  });
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') document.querySelectorAll('.overlay').forEach(el => el.classList.add('hidden'));
+});
+
+// ── TABS ──────────────────────────────────────────────────
+let _currentSettingsTab = 'pos';
+
+function switchTab(name, el) {
+  ['dict','rules','examples','settings'].forEach(t => {
+    const el2 = document.getElementById('tab-'+t);
+    if (el2) el2.style.display = 'none';
+    const s = document.getElementById('tab-'+t+'-sticky');
+    if (s) s.style.display = 'none';
+  });
+  const target = document.getElementById('tab-'+name);
+  if (target) target.style.display = 'block';
+  const sticky = document.getElementById('tab-'+name+'-sticky');
+  if (sticky) sticky.style.display = 'block';
+  document.querySelectorAll('.tabbar-btn').forEach(b => b.classList.remove('active'));
+  if (el) el.classList.add('active');
+  if (name === 'rules') renderRules();
+  if (name === 'examples') renderSentences();
+  if (name === 'settings') switchSettingsTab(_currentSettingsTab);
+}
+
+function switchSettingsTab(name, el) {
+  _currentSettingsTab = name;
+  ['pos','fieldlabels','phoneme','fontsetting','info','export'].forEach(t => {
+    const el2 = document.getElementById('stab-'+t);
+    if (el2) el2.style.display = t === name ? 'block' : 'none';
+  });
+  document.querySelectorAll('[id^="stab-btn-"]').forEach(b => b.classList.remove('active'));
+  const btn = document.getElementById('stab-btn-' + name);
+  if (btn) btn.classList.add('active');
+  else if (el) el.classList.add('active');
+  if (name === 'pos') renderPOSManager();
+  if (name === 'fieldlabels') renderFieldLabels();
+  if (name === 'phoneme') renderPhonemeRules();
+  if (name === 'fontsetting') renderFontTab();
+  if (name === 'info') { renderCharPie(); renderCharFreq(); }
+}
+
+// ── SCROLL & SORT 保持 ────────────────────────────────────
+function saveScrollAndSort() {
+  const scroll = document.getElementById('main-scroll-area');
+  const sort = document.getElementById('sort-select');
+  if (scroll) sessionStorage.setItem('scrollTop', scroll.scrollTop);
+  if (sort) sessionStorage.setItem('sortOrder', sort.value);
+}
+
+function restoreScrollAndSort() {
+  const sort = document.getElementById('sort-select');
+  const saved = sessionStorage.getItem('sortOrder');
+  if (sort && saved) sort.value = saved;
+  const scrollTop = parseInt(sessionStorage.getItem('scrollTop') || '0');
+  setTimeout(() => {
+    const scroll = document.getElementById('main-scroll-area');
+    if (scroll) scroll.scrollTop = scrollTop;
+  }, 50);
+}
+let editingSentenceId = null;
+
+function renderSentences() {
+  const el = document.getElementById('sentences-list');
+  if (!el) return;
+  if (!sentences.length) {
+    el.innerHTML = '<div class="empty-state"><div class="big">✦</div><p>例文がまだありません。</p></div>';
+    return;
+  }
+  el.innerHTML = sentences.map(s => {
+    const wordsHtml = (s.linkedWords||[]).map(w => {
+      const found = words.find(x => x.id === w.id);
+      const label = found ? found.word : w.word;
+      return `<span class="sentence-word-link" onclick="event.stopPropagation();jumpToWord('${w.id}')">${esc(label)}</span>`;
+    }).join('');
+    return `<div class="sentence-card" onmousedown="sentMouseDown(event)" onmouseup="sentMouseUp('${s.id}',event)" oncontextmenu="return false">
+      <div class="card-actions-hover" onmousedown="event.stopPropagation()" onmouseup="event.stopPropagation()">
+        <button class="card-action-btn del" onclick="deleteSentence('${s.id}')">削除</button>
+      </div>
+      <div class="sentence-text">${esc(s.text)}</div>
+      ${showRomanSentence && s.text ? `<div style="font-family:'Noto Serif JP',serif;font-size:13px;color:var(--text3);margin-bottom:4px">${esc(s.text)}</div>` : ''}
+      ${s.trans ? `<div class="sentence-trans">${esc(s.trans)}</div>` : ''}
+      ${wordsHtml ? `<div class="sentence-words">${wordsHtml}</div>` : ''}
+      ${s.note ? `<div class="sentence-note">${esc(s.note)}</div>` : ''}
+    </div>`;
+  }).join('');
+}
+
+let _sentMouseDownTime = 0;
+function sentMouseDown(e) { if (e.button !== 0) return; _sentMouseDownTime = Date.now(); }
+function sentMouseUp(id, e) {
+  if (e.button !== 0) return;
+  if (e.target.closest('.card-actions-hover')) return;
+  if (Date.now() - _sentMouseDownTime > MAX_HOLD) return;
+  openEditSentence(id);
+}
+
+function openAddSentence() {
+  editingSentenceId = null;
+  document.getElementById('modal-sentence-title').textContent = '例文を追加';
+  document.getElementById('s-text').value = '';
+  document.getElementById('s-trans').value = '';
+  document.getElementById('s-words').value = '';
+  document.getElementById('s-note').value = '';
+  document.getElementById('s-words-preview').innerHTML = '';
+  showModal('sentence-modal');
+}
+
+function openEditSentence(id) {
+  editingSentenceId = id;
+  const s = sentences.find(x => x.id === id); if (!s) return;
+  document.getElementById('modal-sentence-title').textContent = '例文を編集';
+  document.getElementById('s-text').value = s.text || '';
+  document.getElementById('s-trans').value = s.trans || '';
+  document.getElementById('s-note').value = s.note || '';
+  const linked = (s.linkedWords||[]).map(w => w.word).join(' ');
+  document.getElementById('s-words').value = linked;
+  updateSentenceWordsPreview();
+  showModal('sentence-modal');
+}
+
+function updateSentenceWordsPreview() {
+  const input = document.getElementById('s-words').value.trim();
+  const preview = document.getElementById('s-words-preview');
+  if (!input) { preview.innerHTML = ''; return; }
+  const tokens = input.split(/\s+/).filter(Boolean);
+  preview.innerHTML = tokens.map(t => {
+    const found = words.find(w => w.word === t);
+    return `<span style="font-size:11px;padding:2px 8px;border-radius:4px;border:1px solid ${found ? 'rgba(201,169,110,0.5)' : 'var(--border2)'};color:${found ? 'var(--accent)' : 'var(--text3)'};">${esc(t)}${found ? '' : ' ？'}</span>`;
+  }).join('');
+}
+
+function saveSentence() {
+  const text = document.getElementById('s-text').value.trim();
+  const trans = document.getElementById('s-trans').value.trim();
+  const note = document.getElementById('s-note').value.trim();
+  const wordTokens = document.getElementById('s-words').value.trim().split(/\s+/).filter(Boolean);
+  const linkedWords = wordTokens.map(t => {
+    const found = words.find(w => w.word === t);
+    return found ? { id: found.id, word: found.word } : { id: '', word: t };
+  });
+  const obj = { id: editingSentenceId || uid(), text, trans, note, linkedWords, ts: Date.now() };
+  if (editingSentenceId) sentences = sentences.map(x => x.id === editingSentenceId ? obj : x);
+  else sentences.push(obj);
+  persist(); closeModal('sentence-modal'); renderSentences();
+}
+
+function deleteSentence(id) {
+  if (!confirm('この例文を削除しますか？')) return;
+  sentences = sentences.filter(x => x.id !== id);
+  persist(); renderSentences();
+}
+
+function jumpToWord(id) {
+  const w = words.find(x => x.id === id);
+  if (!w) return;
+  switchTab('dict', document.querySelector('.tabbar-btn'));
+  setTimeout(() => {
+    document.getElementById('search-input').value = w.word;
+    renderWords();
+  }, 50);
+}
+
+function parsePhonemeText(text) {
+  const classes = {};
+  const rules = [];
+
+  for (let line of text.split('\n')) {
+    line = line.trim();
+    if (!line || line.startsWith('#')) continue;
+
+    // クラス定義: @V = a e i o u
+    const clsMatch = line.match(/^@(\w+)\s*=\s*(.+)$/);
+    if (clsMatch) {
+      classes[clsMatch[1]] = clsMatch[2].trim().split(/\s+/);
+      continue;
+    }
+
+    // [if:条件,...] ルール記法
+    // 条件: $n=文字数、^X=Xで終わる、^@V=クラスで終わる、@Vn=クラスがn個
+    let ifConds = null;
+    let restLine = line;
+    const ifMatch = line.match(/^\[if:((?:[^\[\]]|\[\d+\])+)\]\s*/);
+    if (ifMatch) {
+      ifConds = ifMatch[1].split(',').map(c => c.trim());
+      restLine = line.slice(ifMatch[0].length);
+    }
+
+    // @V[n] = +suffix 記法（[if:...] と組み合わせ可）
+    const nthMatch = restLine.match(/^@(\w+)\[(\d+)\]\s*=\s*(.+)$/);
+    if (nthMatch) {
+      const suffix = nthMatch[3].startsWith('+') ? nthMatch[3].slice(1) : nthMatch[3];
+      rules.push({ _nth: true, cls: nthMatch[1], n: parseInt(nthMatch[2]), suffix, ifConds, _classes: classes });
+      continue;
+    }
+
+    const eqIdx = restLine.indexOf('=');
+    if (eqIdx < 0) continue;
+    const to  = restLine.slice(eqIdx + 1).trim();
+    const lhs = restLine.slice(0, eqIdx).trim();
+    if (!lhs) continue;
+
+    let from = lhs, pos = null, clsPre = null, clsPost = null;
+    let negPost = false, negPre = false, negPos = false;
+
+    if (lhs.endsWith('^')) { from = lhs.slice(0, -1); pos = 'start'; }
+    else if (lhs.endsWith('!^')) { from = lhs.slice(0, -2); pos = 'start'; negPos = true; }
+    else if (lhs.startsWith('^')) { from = lhs.slice(1); pos = 'end'; }
+    else if (lhs.startsWith('!^')) { from = lhs.slice(2); pos = 'end'; negPos = true; }
+    else {
+      // 前置クラス + 語末: @X from^  /  !@X from^
+      const preClsEnd = lhs.match(/^(!?)@(\w+)\s+(.+?)\^$/);
+      if (preClsEnd) {
+        negPre = preClsEnd[1] === '!';
+        clsPre = preClsEnd[2];
+        from   = preClsEnd[3].trim();
+        pos    = 'end';
+      }
+      // 語頭 + 後続クラス: from^ @Y  /  from^ !@Y
+      else {
+        const startPostCls = lhs.match(/^(.+?)\^\s+(!?)@(\w+)$/);
+        if (startPostCls) {
+          from    = startPostCls[1].trim();
+          pos     = 'start';
+          negPost = startPostCls[2] === '!';
+          clsPost = startPostCls[3];
+        } else {
+      // 前置+後続両方: (@X|!@X) from (@Y|!@Y)
+      // 例: @J j @V  /  !@J j @V  /  @J j !@V  /  !@J j !@V
+      const bothCls = lhs.match(/^(!?)@(\w+)\s+(.+?)\s+(!?)@(\w+)$/);
+      if (bothCls) {
+        negPre  = bothCls[1] === '!';
+        clsPre  = bothCls[2];
+        from    = bothCls[3].trim();
+        negPost = bothCls[4] === '!';
+        clsPost = bothCls[5];
+      } else {
+        // 否定後続クラス: from !@X
+        const negPostCls = lhs.match(/^(.+?)\s*!@(\w+)$/);
+        if (negPostCls) { from = negPostCls[1].trim(); clsPost = negPostCls[2]; negPost = true; }
+        else {
+          // 肯定後続クラス: from @X
+          const postCls = lhs.match(/^(.+?)\s*@(\w+)$/);
+          if (postCls) { from = postCls[1].trim(); clsPost = postCls[2]; }
+          else {
+            // 否定後続リテラル: from !X
+            const negPostLit = lhs.match(/^(.+?)\s+!(\S+)$/);
+            if (negPostLit) { from = negPostLit[1].trim(); clsPost = negPostLit[2]; negPost = true; }
+            else {
+              // 否定前置クラス: !@X from
+              const negPreCls = lhs.match(/^!@(\w+)\s+(.+)$/);
+              if (negPreCls) { clsPre = negPreCls[1]; from = negPreCls[2].trim(); negPre = true; }
+              else {
+                // 肯定前置クラス: @X from
+                const preCls = lhs.match(/^@(\w+)\s+(.+)$/);
+                if (preCls) { clsPre = preCls[1]; from = preCls[2].trim(); }
+              }
+            }
+          }
+        }
+      }
+        } // end startPostCls else
+      } // end preClsEnd else
+    }
+
+    if (!from) continue;
+    rules.push({ from, to, pos, clsPre, clsPost, negPost, negPre, negPos, ifConds });
+  }
+
+  return rules.map(r => ({ ...r, _classes: { ...classes } }));
+}
+
+function serializePhonemeRules(rules) {
+  return rules.map(r => {
+    // [if:...] プレフィックス
+    let ifPrefix = '';
+    if (r.ifConds && r.ifConds.length) {
+      ifPrefix = '[if:' + r.ifConds.join(',') + '] ';
+    }
+
+    // _nth ルール: [if:...] @CLS[n] = +suffix
+    if (r._nth) {
+      const suffix = r.suffix ? '+' + r.suffix : '';
+      return `${ifPrefix}@${r.cls}[${r.n}] = ${suffix}`;
+    }
+
+    let lhs = r.from || '';
+
+    // 前置+後続両クラス条件
+    if (r.clsPre && r.clsPost) {
+      const pre = (r.negPre ? '!' : '') + '@' + r.clsPre;
+      const post = (r.negPost ? '!' : '') + '@' + r.clsPost;
+      lhs = `${pre} ${lhs} ${post}`;
+    } else if (r.clsPre && r.pos === 'end') {
+      // 前置クラス + 語末: @X from^
+      lhs = (r.negPre ? '!' : '') + '@' + r.clsPre + ' ' + lhs + (r.negPos ? '!^' : '^');
+    } else if (r.clsPost && r.pos === 'start') {
+      // 語頭 + 後続クラス: from^ @Y
+      const isClass = r._classes && (r.clsPost in r._classes);
+      const postStr = isClass
+        ? (r.negPost ? '!' : '') + '@' + r.clsPost
+        : (r.negPost ? '!' : '') + r.clsPost;
+      lhs = lhs + (r.negPos ? '!^' : '^') + ' ' + postStr;
+    } else if (r.clsPre) {
+      lhs = (r.negPre ? '!' : '') + '@' + r.clsPre + ' ' + lhs;
+    } else if (r.clsPost) {
+      const isClass = r._classes && (r.clsPost in r._classes);
+      const postStr = isClass
+        ? (r.negPost ? '!' : '') + '@' + r.clsPost
+        : (r.negPost ? '!' : '') + r.clsPost;
+      lhs = lhs + ' ' + postStr;
+    } else if (r.pos === 'start') {
+      lhs = lhs + (r.negPos ? '!^' : '^');
+    } else if (r.pos === 'end') {
+      lhs = (r.negPos ? '!^' : '^') + lhs;
+    }
+
+    return `${ifPrefix}${lhs} = ${r.to}`;
+  }).join('\n');
+}
+
+function applyPhonemeRules(spelling) {
+  if (!phonemeRules.length) return '';
+
+  // @V[n] = +ː 系ルールを分離
+  const nthRules = phonemeRules.filter(r => r._nth);
+  const normalRules = phonemeRules.filter(r => !r._nth);
+
+  // 通常変換を実行（normalRules のみ使用）
+  const _phonemeRulesOrig = phonemeRules;
+  // 一時的に phonemeRules を差し替えて再帰しないよう直接処理
+  const result = _applyNormalRules(spelling, normalRules);
+
+  if (!nthRules.length) return result;
+
+  // n番目出現にsuffixを挿入する後処理
+  // spellingを走査してクラスメンバーの出現カウントを追跡し、
+  // 変換結果の対応位置にsuffixを挿入する
+  // → 変換前spellingを走査してマッチ位置を記録、変換結果の対応箇所に挿入
+  return _applyNthRules(spelling, normalRules, nthRules);
+}
+
+// [if:...] 条件をワード全体に対して評価
+function _checkIfConds(conds, spelling, classes) {
+  if (!conds) return true;
+  for (let c of conds) {
+    // != プレフィックス：後続条件を評価して結果を反転
+    const neg = c.startsWith('!=');
+    const cc = neg ? c.slice(2) : c;
+
+    // $n : 文字数がn
+    const lenM = cc.match(/^\$(\d+)$/);
+    if (lenM) {
+      const ok = spelling.length === parseInt(lenM[1]);
+      if (neg ? ok : !ok) return false; continue;
+    }
+    // ^@Xn : クラスXで終わるものがn個連続
+    const endClsNM = cc.match(/^\^@(\w+)(\d+)$/);
+    if (endClsNM) {
+      const members = (classes[endClsNM[1]] || []).slice().sort((a,b) => b.length-a.length);
+      const need = parseInt(endClsNM[2]);
+      let pos = spelling.length, count = 0;
+      while (count < need) {
+        const m = members.find(m => pos >= m.length && spelling.slice(pos-m.length, pos) === m);
+        if (!m) break;
+        pos -= m.length; count++;
+      }
+      const ok = count === need;
+      if (neg ? ok : !ok) return false; continue;
+    }
+    // ^@X : クラスXで終わる
+    const endClsM = cc.match(/^\^@(\w+)$/);
+    if (endClsM) {
+      const members = classes[endClsM[1]] || [];
+      const ok = members.some(m => spelling.endsWith(m));
+      if (neg ? ok : !ok) return false; continue;
+    }
+    // ^X : リテラルXで終わる
+    const endLitM = cc.match(/^\^(.+)$/);
+    if (endLitM) {
+      const ok = spelling.endsWith(endLitM[1]);
+      if (neg ? ok : !ok) return false; continue;
+    }
+    // @Xn : クラスXがn個
+    const clsCountM = cc.match(/^@(\w+)(\d+)$/);
+    if (clsCountM) {
+      const members = classes[clsCountM[1]] || [];
+      let count = 0, j = 0;
+      while (j < spelling.length) {
+        const m = members.filter(m => spelling.startsWith(m, j)).sort((a,b) => b.length-a.length)[0];
+        if (m) { count++; j += m.length; } else j++;
+      }
+      const ok = count === parseInt(clsCountM[2]);
+      if (neg ? ok : !ok) return false; continue;
+    }
+    // @X[n]~@Y[m];@Zk / @X[n]~@Y[m];@Zk+ / @X[n]~@Y[m];@Zk-
+    // @X[n]~@Y[m];!=@Zk / @X[n]~@Y[m];!=@Zk+ / @X[n]~@Y[m];!=@Zk-
+    // n番目のクラスXとm番目のクラスYの間にクラスZがk個（+:以上、-:以下、なし:ちょうど）
+    const betweenM = cc.match(/^@(\w+)\[(\d+)\]~@(\w+)\[(\d+)\];(!=)?@(\w+)(\d+)([+-]?)$/);
+    if (betweenM) {
+      const [, clsA, nA, clsB, nB, zNeg, clsZ, kStr, mod] = betweenM;
+      const zNegBool = !!zNeg;
+      const k = parseInt(kStr);
+      // クラスAのn番目の終端位置を求める
+      const membersA = (classes[clsA] || []).slice().sort((a,b) => b.length-a.length);
+      let countA = 0, posA = -1, j = 0;
+      while (j < spelling.length) {
+        const m = membersA.find(m => spelling.startsWith(m, j));
+        if (m) { countA++; if (countA === parseInt(nA)) { posA = j + m.length; break; } j += m.length; }
+        else j++;
+      }
+      // クラスBのm番目の開始位置を求める
+      const membersB = (classes[clsB] || []).slice().sort((a,b) => b.length-a.length);
+      let countB = 0, posB = -1; j = 0;
+      while (j < spelling.length) {
+        const m = membersB.find(m => spelling.startsWith(m, j));
+        if (m) { countB++; if (countB === parseInt(nB)) { posB = j; break; } j += m.length; }
+        else j++;
+      }
+      if (posA === -1 || posB === -1 || posA > posB) {
+        if (!neg) return false; continue;
+      }
+      // posA～posB間でクラスZをカウント
+      const membersZ = (classes[clsZ] || []).slice().sort((a,b) => b.length-a.length);
+      let countZ = 0; j = posA;
+      while (j < posB) {
+        const m = membersZ.find(m => spelling.startsWith(m, j));
+        if (m) { countZ++; j += m.length; } else j++;
+      }
+      const baseOk = mod === '+' ? countZ >= k : mod === '-' ? countZ <= k : countZ === k;
+      const ok = zNegBool ? !baseOk : baseOk;
+      if (neg ? ok : !ok) return false; continue;
+    }
+  }
+  return true;
+}
+
+function _applyNormalRules(spelling, rules) {
+  if (!rules.length) return '';
+  // 条件付き優先、次に from の長さ優先
+  const sorted = [...rules].filter(r => r.from).sort((a, b) => {
+    const ac = (a.pos || a.clsPre || a.clsPost) ? 1 : 0;
+    const bc = (b.pos || b.clsPre || b.clsPost) ? 1 : 0;
+    if (bc !== ac) return bc - ac;
+    return b.from.length - a.from.length;
+  });
+
+  // from ごとにグループ化（条件なしルールのみ）
+  const uncondByFrom = {};
+  for (const r of sorted) {
+    if (!r.pos && !r.clsPre && !r.clsPost) {
+      if (!uncondByFrom[r.from]) uncondByFrom[r.from] = r;
+    }
+  }
+
+  const s = spelling;
+  let result = '';
+  let i = 0;
+
+  while (i < s.length) {
+    let matched = false;
+
+    // まず条件付きルールを試す（長い順）
+    for (const r of sorted) {
+      if (!r.from || !s.startsWith(r.from, i)) continue;
+      const end = i + r.from.length;
+      const cls = r._classes || {};
+      const isCond = !!(r.pos || r.clsPre || r.clsPost || r.ifConds);
+
+      if (isCond) {
+        // [if:...] ワード全体条件
+        if (r.ifConds && !_checkIfConds(r.ifConds, s, cls)) continue;
+        // 位置条件
+        if (r.pos === 'start') { const ok = i === 0; if (r.negPos ? ok : !ok) continue; }
+        if (r.pos === 'end')   { const ok = end === s.length; if (r.negPos ? ok : !ok) continue; }
+        // 後続条件
+        if (r.clsPost) {
+          const members = cls[r.clsPost] || [r.clsPost];
+          const ok = members.some(m => s.startsWith(m, end));
+          if (r.negPost ? ok : !ok) continue;
+        }
+        // 前置条件
+        if (r.clsPre) {
+          const members = cls[r.clsPre] || [r.clsPre];
+          const ok = members.some(m => i >= m.length && s.slice(i - m.length, i) === m);
+          if (r.negPre ? ok : !ok) continue;
+        }
+        result += r.to || '';
+        i = end;
+        matched = true;
+        break;
+      }
+    }
+
+    if (matched) continue;
+
+    // 条件付きがなかった場合のみ、無条件ルールを longest-match で試す
+    let bestUncond = null;
+    for (const from of Object.keys(uncondByFrom).sort((a,b) => b.length - a.length)) {
+      if (s.startsWith(from, i)) { bestUncond = uncondByFrom[from]; break; }
+    }
+
+    if (bestUncond) {
+      result += bestUncond.to || '';
+      i += bestUncond.from.length;
+    } else {
+      // 未設定文字は無視
+      i++;
+    }
+  }
+  return result;
+}
+
+function _applyNthRules(spelling, normalRules, nthRules) {
+  // spellingを走査して「どの位置でどのクラスに何番目マッチしたか」を記録
+  // 同時に通常変換結果の各セグメント（spelling位置→変換後文字列）を記録
+  const sorted = [...normalRules].filter(r => r.from).sort((a, b) => {
+    const ac = (a.pos || a.clsPre || a.clsPost) ? 1 : 0;
+    const bc = (b.pos || b.clsPre || b.clsPost) ? 1 : 0;
+    if (bc !== ac) return bc - ac;
+    return b.from.length - a.from.length;
+  });
+  const uncondByFrom = {};
+  for (const r of sorted) {
+    if (!r.pos && !r.clsPre && !r.clsPost) {
+      if (!uncondByFrom[r.from]) uncondByFrom[r.from] = r;
+    }
+  }
+
+  // クラスカウンタ（クラス名→何番目か）
+  const clsCounts = {};
+  // セグメント: {spFrom, spLen, out} (spelling位置, 長さ, 変換後文字列)
+  const segments = [];
+  const s = spelling;
+  let i = 0;
+
+  while (i < s.length) {
+    let matched = false;
+    for (const r of sorted) {
+      if (!r.from || !s.startsWith(r.from, i)) continue;
+      const end = i + r.from.length;
+      const cls = r._classes || {};
+      const isCond = !!(r.pos || r.clsPre || r.clsPost || r.ifConds);
+      if (isCond) {
+        if (r.ifConds && !_checkIfConds(r.ifConds, s, cls)) continue;
+        if (r.pos === 'start') { const ok = i === 0; if (r.negPos ? ok : !ok) continue; }
+        if (r.pos === 'end')   { const ok = end === s.length; if (r.negPos ? ok : !ok) continue; }
+        if (r.clsPost) {
+          const members = cls[r.clsPost] || [r.clsPost];
+          const ok = members.some(m => s.startsWith(m, end));
+          if (r.negPost ? ok : !ok) continue;
+        }
+        if (r.clsPre) {
+          const members = cls[r.clsPre] || [r.clsPre];
+          const ok = members.some(m => i >= m.length && s.slice(i - m.length, i) === m);
+          if (r.negPre ? ok : !ok) continue;
+        }
+        segments.push({ spFrom: i, spLen: r.from.length, out: r.to || '' });
+        i = end; matched = true; break;
+      }
+    }
+    if (matched) continue;
+    let bestUncond = null;
+    for (const from of Object.keys(uncondByFrom).sort((a,b) => b.length - a.length)) {
+      if (s.startsWith(from, i)) { bestUncond = uncondByFrom[from]; break; }
+    }
+    if (bestUncond) {
+      segments.push({ spFrom: i, spLen: bestUncond.from.length, out: bestUncond.to || '' });
+      i += bestUncond.from.length;
+    } else {
+      i++; // 未設定文字は無視
+    }
+  }
+
+  // nthRules: クラスメンバーの longest-match で spelling を直接走査し
+  // n番目に出現したクラスメンバーが含まれるセグメントに suffix を追加する
+  //
+  // 手順:
+  // 1) spelling を longest-match でクラス走査 → 各クラスメンバーの出現位置を記録
+  // 2) n番目の出現位置（spelling上のspFrom）と一致するセグメントに suffix 付与
+
+  // ルールごとに「n番目のメンバーが始まる spelling 位置」を求める（キー=ルールindex）
+  const nthHitRange = {}; // key: ruleIdx → {start, end} (spelling上の範囲)
+  for (let ri = 0; ri < nthRules.length; ri++) {
+    const nr = nthRules[ri];
+    // 単語全体条件（!=@X 単体はヒット位置依存なので除外して先にチェック）
+    const wordConds = (nr.ifConds || []).filter(c => !c.match(/^!=@\w+$/));
+    if (!_checkIfConds(wordConds.length ? wordConds : null, s, nr._classes || {})) continue;
+
+    const members = ((nr._classes || {})[nr.cls] || [])
+      .slice().sort((a, b) => b.length - a.length); // longest-match
+    let count = 0, j = 0;
+    while (j < s.length) {
+      const m = members.find(m => s.startsWith(m, j));
+      if (m) {
+        count++;
+        if (count === nr.n) {
+          // !=@X（数字なし）条件：ヒットした文字列がそのクラスに属さないか確認
+          const neqSingleConds = (nr.ifConds || []).filter(c => c.match(/^!=@\w+$/));
+          const neqOk = neqSingleConds.every(c => {
+            const clsName = c.slice(3); // "!=@X" → "X"
+            const neqMembers = (nr._classes || {})[clsName] || [];
+            return !neqMembers.some(nm => s.startsWith(nm, j));
+          });
+          if (neqOk) {
+            nthHitRange[ri] = { start: j, end: j + m.length - 1 };
+          }
+          break;
+        }
+        j += m.length;
+      } else {
+        j++;
+      }
+    }
+  }
+
+  // セグメントを走査して、ヒット範囲の末尾を含むセグメントに suffix を追加
+  let result = '';
+  for (const seg of segments) {
+    let suffix = '';
+    for (let ri = 0; ri < nthRules.length; ri++) {
+      if (!(ri in nthHitRange)) continue;
+      const { end } = nthHitRange[ri];
+      // このセグメントがヒット範囲の末尾を含む場合
+      if (end >= seg.spFrom && end < seg.spFrom + seg.spLen) {
+        suffix += nthRules[ri].suffix;
+      }
+    }
+    result += seg.out + suffix;
+  }
+  return result;
+}
+
+// テキストエリア表示を更新
+// モーダル: 綴り入力→発音記号を自動生成
+let romanManuallyEdited = false;
+
+function autoFillRoman() {
+  if (romanManuallyEdited) return;
+  const spelling = document.getElementById('f-word').value;
+  const result = applyPhonemeRules(spelling);
+  const romanEl = document.getElementById('f-roman');
+  const hint = document.getElementById('roman-auto-hint');
+  romanEl.value = result ? `/${result}/` : '';
+  if (result && phonemeRules.length) {
+    hint.classList.add('visible');
+  } else {
+    hint.classList.remove('visible');
+  }
+}
+
+function onRomanManualEdit() {
+  const val = document.getElementById('f-roman').value;
+  romanManuallyEdited = val !== '';
+  document.getElementById('roman-auto-hint').classList.remove('visible');
+}
+
+let _phonemeRawText = '';
+
+function renderPhonemeRules() {
+  const ta = document.getElementById('phoneme-textarea');
+  if (!ta) return;
+  ta.value = _phonemeRawText;
+  updatePhonemePreview();
+}
+
+function onPhonemeTextareaInput(ta) {
+  _phonemeRawText = ta.value;
+  phonemeRules = parsePhonemeText(ta.value);
+  updatePhonemePreview();
+}
+
+function savePhonemeRules() {
+  const ta = document.getElementById('phoneme-textarea');
+  if (ta) {
+    _phonemeRawText = ta.value;
+    phonemeRules = parsePhonemeText(ta.value);
+  }
+  persist();
+  showToast('保存しました');
+}
+
+function updatePhonemePreview() {
+  const inp = document.getElementById('phoneme-preview-input');
+  const out = document.getElementById('phoneme-preview-out');
+  if (!inp || !out) return;
+  out.textContent = applyPhonemeRules(inp.value);
+}
+
+// ── FONT SETTINGS ─────────────────────────────────────────
+function applyFontToDOM() {
+  const name = fontSettings.name;
+  const ls = fontSettings.letterSpacing || 0;
+  const ws = fontSettings.wordSpacing || 0;
+  const fs = fontSettings.fontSize || 22;
+  const styleId = 'conlang-word-font-style';
+  let el = document.getElementById(styleId);
+  if (!el) { el = document.createElement('style'); el.id = styleId; document.head.appendChild(el); }
+  if (name) {
+    el.textContent = `:root { --word-font: '${name}'; }
+.word-main { font-family: '${name}', serif !important; font-size: ${fs}px !important; letter-spacing: ${ls}em; word-spacing: ${ws - ls}em; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; text-rendering: geometricPrecision; }
+#font-preview-text { font-family: '${name}', serif !important; font-size: ${fs}px !important; letter-spacing: ${ls}em; word-spacing: ${ws - ls}em; -webkit-font-smoothing: antialiased; }`;
+  } else {
+    el.textContent = `:root { --word-font: 'Libre Baskerville'; }
+.word-main { letter-spacing: ${ls}em; word-spacing: ${ws - ls}em; }`;
+  }
+}
+
+function applyLocalFont() {
+  const name = document.getElementById('lf-name').value.trim();
+  const file = document.getElementById('lf-file').files[0];
+  if (!name || !file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const dataUrl = e.target.result;
+    const faceId = 'conlang-lfont-style';
+    let el = document.getElementById(faceId);
+    if (!el) { el = document.createElement('style'); el.id = faceId; document.head.appendChild(el); }
+    el.textContent = `@font-face { font-family: '${name}'; src: url('${dataUrl}'); }`;
+    fontSettings = { type: 'local', name, dataUrl, letterSpacing: fontSettings.letterSpacing || 0 };
+    _fontDataUrl = dataUrl; // メモリにのみ保持
+    applyFontToDOM();
+    renderFontTab();
+    renderWords();
+  };
+  reader.readAsDataURL(file);
+}
+
+function saveFontSettings() { persist(); showToast('保存しました'); }
+
+function clearFontSettings() {
+  fontSettings = { type: null, name: null, letterSpacing: 0 };
+  ['conlang-lfont-style'].forEach(id => { const el = document.getElementById(id); if (el) el.remove(); });
+  applyFontToDOM();
+  renderFontTab();
+  renderWords();
+}
+
+function toggleRomanWord(val) {
+  showRomanWord = val;
+  showRoman = val;
+  renderWords();
+}
+
+function toggleRomanSentence(val) {
+  showRomanSentence = val;
+  renderSentences();
+}
+
+function renderFontTab() {
+  const info = document.getElementById('font-current-info');
+  const toggle = document.getElementById('show-roman-word-toggle');
+  const slider = document.getElementById('ls-slider');
+  const sliderVal = document.getElementById('ls-value');
+  if (info) info.textContent = fontSettings.name ? `適用中: ${fontSettings.name}` : '未設定';
+  const toggleS = document.getElementById('show-roman-sentence-toggle'); if (toggle) toggle.checked = showRomanWord; if (toggleS) toggleS.checked = showRomanSentence;
+  const fsSlider = document.getElementById('fs-slider');
+  const fsVal = document.getElementById('fs-value');
+  if (fsSlider) fsSlider.value = fontSettings.fontSize || 22;
+  if (fsVal) fsVal.textContent = (fontSettings.fontSize || 22) + 'px';
+  if (slider) { slider.value = fontSettings.letterSpacing || 0; }
+  if (sliderVal) sliderVal.textContent = (fontSettings.letterSpacing || 0).toFixed(2) + 'em';
+  const wsSlider = document.getElementById('ws-slider');
+  const wsVal = document.getElementById('ws-value');
+  if (wsSlider) wsSlider.value = fontSettings.wordSpacing || 0;
+  if (wsVal) wsVal.textContent = (fontSettings.wordSpacing || 0).toFixed(2) + 'em';
+  if (fontSettings.type === 'local') {
+    const ln = document.getElementById('lf-name'); if (ln) ln.value = fontSettings.name || '';
+  }
+}
+
+function updateFontSize(val) {
+  fontSettings.fontSize = parseInt(val);
+  document.getElementById('fs-value').textContent = val + 'px';
+  applyFontToDOM();
+  renderWords();
+}
+
+function updateLetterSpacing(val) {
+  fontSettings.letterSpacing = parseFloat(val);
+  document.getElementById('ls-value').textContent = parseFloat(val).toFixed(2) + 'em';
+  applyFontToDOM();
+}
+
+function updateWordSpacing(val) {
+  fontSettings.wordSpacing = parseFloat(val);
+  document.getElementById('ws-value').textContent = parseFloat(val).toFixed(2) + 'em';
+  applyFontToDOM();
+}
+
+let _fontDataUrl = null; // フォントdataUrlはメモリのみ保持
+
+function restoreFontFromSettings() {
+  if (!fontSettings.name) return;
+  if (fontSettings.type === 'local') {
+    const dataUrl = fontSettings.dataUrl || _fontDataUrl;
+    if (dataUrl) {
+      const faceId = 'conlang-lfont-style';
+      let el = document.getElementById(faceId);
+      if (!el) { el = document.createElement('style'); el.id = faceId; document.head.appendChild(el); }
+      el.textContent = `@font-face { font-family: '${fontSettings.name}'; src: url('${dataUrl}'); }`;
+    }
+  }
+  applyFontToDOM();
+}
+
+let _ruleMouseDownTime = 0;
+
+function ruleMouseDown(e) {
+  if (e.button !== 0) return;
+  _ruleMouseDownTime = Date.now();
+}
+
+let _mouseDownTime = 0;
+const MAX_HOLD = 300;
+
+function wordMouseDown(id, e) {
+  if (e.button !== 0) return;
+  _mouseDownTime = Date.now();
+}
+
+function wordMouseUp(id, e) {
+  if (e.button !== 0) return;
+  if (e.target.closest('.card-actions-hover')) return;
+  const holdTime = Date.now() - _mouseDownTime;
+  if (holdTime > MAX_HOLD) return;
+  openEditWord(id);
+}
+
+function ruleMouseUp(id, e) {
+  if (e.button !== 0) return;
+  if (e.target.closest('.card-actions-hover')) return;
+  if (Date.now() - _ruleMouseDownTime > MAX_HOLD) return;
+  toggleRuleCollapse(id);
+}
+
+// ── INIT ──────────────────────────────────────────────────
+(async () => {
+  // クラウドからデータを取得してローカルに反映
+  await syncFromCloud();
+  // dicts/active をクラウドから復元
+  try {
+    const dictsVal = await idbGet('__dicts__');
+    const activeVal = await idbGet('__active__');
+    if (dictsVal) { try { const d = JSON.parse(dictsVal); if (d && d.length) { localStorage.setItem('conlang_dicts_v1', dictsVal); } } catch {} }
+    if (activeVal) { localStorage.setItem('conlang_active_v1', activeVal); }
+  } catch {}
+  loadDicts();
+  await loadAsync();
+  restoreFontFromSettings();
+  renderDictList();
+  renderSearchScopeBar();
+  updateStats();
+  switchTab('dict', document.querySelector('.tabbar-btn'));
+  restoreScrollAndSort();
+  renderWords();
+  restoreScrollAndSort();
+})();
+</script>
+</body>
+</html>
