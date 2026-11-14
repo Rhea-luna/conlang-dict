@@ -895,6 +895,12 @@ function loadDicts() {
 function saveDicts() {
   localStorage.setItem(DICTS_KEY, JSON.stringify(dicts));
   localStorage.setItem(ACTIVE_KEY, activeDictId);
+  // クラウドにも同期
+  setSyncStatus('syncing');
+  Promise.all([
+    _sb.from('dict_data').upsert({ key: '__dicts__', value: JSON.stringify(dicts) }, { onConflict: 'key' }),
+    _sb.from('dict_data').upsert({ key: '__active__', value: activeDictId }, { onConflict: 'key' }),
+  ]).then(() => setSyncStatus('ok')).catch(e => { setSyncStatus('err'); console.warn(e); });
 }
 
 function activeDict() { return dicts.find(d => d.id === activeDictId) || dicts[0]; }
@@ -2879,8 +2885,8 @@ function ruleMouseUp(id, e) {
   try {
     const dictsVal = await idbGet('__dicts__');
     const activeVal = await idbGet('__active__');
-    if (dictsVal) { try { const d = JSON.parse(dictsVal); if (d && d.length) { localStorage.setItem('conlang_dicts_v1', dictsVal); } } catch {} }
-    if (activeVal) { localStorage.setItem('conlang_active_v1', activeVal); }
+    if (dictsVal) { try { const d = JSON.parse(dictsVal); if (d && d.length) { localStorage.setItem(DICTS_KEY, dictsVal); } } catch {} }
+    if (activeVal) { localStorage.setItem(ACTIVE_KEY, activeVal); }
   } catch {}
   loadDicts();
   await loadAsync();
