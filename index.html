@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>人工言語辞書</title>
+<title>RheaDict</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.50.0/dist/umd/supabase.min.js"></script>
 <link rel="apple-touch-icon" href="icon.png">
 <link rel="icon" type="image/png" href="icon.png">
@@ -507,7 +507,7 @@
 <header class="header">
   <div class="logo">
     <div class="logo-mark">✦</div>
-    人工言語辞書
+    RheaDict
   </div>
   <div style="display:flex;align-items:center;gap:8px">
     <span id="sync-status" title="同期状態" style="font-size:14px;width:20px;text-align:center;cursor:default;color:var(--text3)">–</span>
@@ -1160,7 +1160,7 @@ function renderDictList() {
     </button>`;
   }).join('');
   // 辞書名をメインタイトルにも反映
-  document.title = activeDict().name + ' — 人工言語辞書';
+  document.title = activeDict().name + ' — RheaDict';
   // モバイル用ドロワーの辞書リスト更新
   const mlist = document.getElementById('mobile-dict-list');
   if (mlist) {
