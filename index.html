@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>人工言語辞書</title>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.50.0/dist/umd/supabase.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600&family=Lora:wght@400;700&family=Libre+Baskerville:wght@400;700&family=Noto+Serif+JP:wght@400;500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
@@ -406,6 +406,66 @@
     letter-spacing: 0.04em;
   }
   .roman-auto-hint.visible { opacity: 1; }
+
+  /* ── スマホ対応 ───────────────────────────────────────── */
+  @media (max-width: 640px) {
+    .header { padding: 0 1rem; height: 50px; }
+    .logo { font-size: 16px; }
+    .logo-mark { width: 22px; height: 22px; font-size: 11px; }
+
+    /* サイドバーを非表示、ボトムナビに変える */
+    .layout { grid-template-columns: 1fr; min-height: calc(100vh - 50px); }
+    .sidebar { display: none; }
+
+    /* メインエリア */
+    .main-area { overflow: hidden; }
+    .main-sticky { padding: 0.4rem 0.75rem 0; }
+    .main-scroll { padding: 0 0.75rem 5rem; }
+
+    /* タブバー */
+    .tabbar { gap: 2px; }
+    .tabbar-btn { padding: 4px 10px; font-size: 11px; }
+
+    /* 検索 */
+    .search-wrap input { font-size: 13px; padding: 8px 12px 8px 34px; }
+    .search-row { flex-wrap: wrap; gap: 6px; }
+
+    /* 単語カード */
+    .word-main { font-size: 18px; }
+    .word-list { gap: 5px; }
+    .word-card { padding: 0.5rem 0.75rem; }
+
+    /* モーダル */
+    .modal-overlay { align-items: flex-end; padding: 0; }
+    .modal { border-radius: var(--r2) var(--r2) 0 0; max-height: 92vh; width: 100% !important; max-width: 100% !important; }
+
+    /* ボトムナビ（辞書切替） */
+    .mobile-dict-bar {
+      display: flex !important;
+      position: fixed; bottom: 0; left: 0; right: 0;
+      background: var(--bg2);
+      border-top: 1px solid var(--border);
+      padding: 6px 12px 10px;
+      gap: 8px; overflow-x: auto;
+      z-index: 40;
+    }
+    .mobile-dict-btn {
+      flex-shrink: 0;
+      background: var(--bg3); border: 1px solid var(--border2);
+      color: var(--text2); border-radius: 20px;
+      padding: 5px 14px; font-size: 12px;
+      font-family: 'Noto Serif JP', serif;
+      cursor: pointer; white-space: nowrap;
+    }
+    .mobile-dict-btn.active { background: var(--accent); color: #1a1400; border-color: var(--accent); }
+    .mobile-dict-add {
+      flex-shrink: 0;
+      background: none; border: 1px dashed var(--border2);
+      color: var(--text3); border-radius: 20px;
+      padding: 5px 12px; font-size: 14px; cursor: pointer;
+    }
+  }
+  .mobile-dict-bar { display: none; }
 </style>
 </head>
 <body>
@@ -420,6 +480,9 @@
     <span id="sync-status" title="同期状態" style="font-size:14px;width:20px;text-align:center;cursor:default;color:var(--text3)">–</span>
   </div>
 </header>
+
+<!-- モバイル用辞書切替バー -->
+<div class="mobile-dict-bar" id="mobile-dict-bar"></div>
 
 <div class="layout">
   <aside class="sidebar">
@@ -1059,6 +1122,13 @@ function renderDictList() {
   }).join('');
   // 辞書名をメインタイトルにも反映
   document.title = activeDict().name + ' — 人工言語辞書';
+  // モバイル用ボトムナビ更新
+  const mbar = document.getElementById('mobile-dict-bar');
+  if (mbar) {
+    mbar.innerHTML = dicts.map(d =>
+      `<button class="mobile-dict-btn${d.id === activeDictId ? ' active' : ''}" onclick="switchDict('${esc(d.id)}')">${esc(d.name)}</button>`
+    ).join('') + `<button class="mobile-dict-add" onclick="addDictPrompt()">＋</button>`;
+  }
 }
 
 function switchDict(id) {
